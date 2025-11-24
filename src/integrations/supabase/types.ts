@@ -108,6 +108,7 @@ export type Database = {
         Row: {
           correct_answer: string
           created_at: string
+          difficulty: string
           id: string
           option_a: string
           option_b: string
@@ -119,6 +120,7 @@ export type Database = {
         Insert: {
           correct_answer: string
           created_at?: string
+          difficulty?: string
           id?: string
           option_a: string
           option_b: string
@@ -130,6 +132,7 @@ export type Database = {
         Update: {
           correct_answer?: string
           created_at?: string
+          difficulty?: string
           id?: string
           option_a?: string
           option_b?: string
