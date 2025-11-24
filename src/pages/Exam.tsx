@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { ArrowLeft, Clock, Trophy } from 'lucide-react';
+import { ArrowLeft, Clock, Trophy, Settings } from 'lucide-react';
 
 interface Question {
   id: string;
@@ -29,16 +30,21 @@ const Exam = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
-  const [timeLeft, setTimeLeft] = useState(600); // 10 minutes
+  const [timeLeft, setTimeLeft] = useState(600);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  // Exam configuration
+  const [showConfig, setShowConfig] = useState(true);
+  const [questionCount, setQuestionCount] = useState('10');
+  const [timeLimit, setTimeLimit] = useState('10');
+  const [difficulty, setDifficulty] = useState('medium');
 
   useEffect(() => {
     if (!user || !subjectId) {
       navigate('/auth');
       return;
     }
-    fetchQuestions();
   }, [user, subjectId]);
 
   useEffect(() => {
@@ -57,11 +63,13 @@ const Exam = () => {
     return () => clearInterval(timer);
   }, [questions]);
 
-  const fetchQuestions = async () => {
+  const startExam = async () => {
+    setLoading(true);
     const { data, error } = await supabase
       .from('questions')
       .select('*')
-      .eq('subject_id', subjectId);
+      .eq('subject_id', subjectId)
+      .eq('difficulty', difficulty);
 
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -69,10 +77,23 @@ const Exam = () => {
       return;
     }
 
-    // Randomly select 10 questions
+    if (!data || data.length < parseInt(questionCount)) {
+      toast({ 
+        title: "Not enough questions", 
+        description: `Only ${data?.length || 0} ${difficulty} questions available for this subject. Please select a different difficulty or reduce question count.`,
+        variant: "destructive" 
+      });
+      setLoading(false);
+      setShowConfig(true);
+      return;
+    }
+
+    // Randomly select questions based on user choice
     const shuffled = data.sort(() => 0.5 - Math.random());
-    const selected = shuffled.slice(0, 10);
+    const selected = shuffled.slice(0, parseInt(questionCount));
     setQuestions(selected);
+    setTimeLeft(parseInt(timeLimit) * 60);
+    setShowConfig(false);
     setLoading(false);
   };
 
@@ -86,7 +107,8 @@ const Exam = () => {
 
     const percentage = (score / questions.length) * 100;
     const xpEarned = score * 10;
-    const timeTaken = 600 - timeLeft;
+    const totalTime = parseInt(timeLimit) * 60;
+    const timeTaken = totalTime - timeLeft;
 
     // Update profile XP
     const { data: profile } = await supabase
@@ -136,6 +158,120 @@ const Exam = () => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Configuration Screen
+  if (showConfig) {
+    return (
+      <div className="min-h-screen gradient-dark p-4">
+        <div className="max-w-2xl mx-auto space-y-6">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/subjects')}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <h1 className="text-2xl font-bold">{subjectName} Exam</h1>
+            <div className="w-10" />
+          </div>
+
+          {/* Configuration Card */}
+          <Card className="border-border/50">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <Settings className="h-6 w-6 text-primary" />
+                <div>
+                  <CardTitle>Configure Your Exam</CardTitle>
+                  <CardDescription>Customize your exam settings</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Number of Questions */}
+              <div className="space-y-3">
+                <Label className="text-base font-semibold">Number of Questions</Label>
+                <Select value={questionCount} onValueChange={setQuestionCount}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="5">5 Questions</SelectItem>
+                    <SelectItem value="10">10 Questions</SelectItem>
+                    <SelectItem value="15">15 Questions</SelectItem>
+                    <SelectItem value="20">20 Questions</SelectItem>
+                    <SelectItem value="30">30 Questions</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Time Limit */}
+              <div className="space-y-3">
+                <Label className="text-base font-semibold">Time Limit</Label>
+                <Select value={timeLimit} onValueChange={setTimeLimit}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="5">5 Minutes</SelectItem>
+                    <SelectItem value="10">10 Minutes</SelectItem>
+                    <SelectItem value="15">15 Minutes</SelectItem>
+                    <SelectItem value="20">20 Minutes</SelectItem>
+                    <SelectItem value="30">30 Minutes</SelectItem>
+                    <SelectItem value="45">45 Minutes</SelectItem>
+                    <SelectItem value="60">60 Minutes</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Difficulty Mode */}
+              <div className="space-y-3">
+                <Label className="text-base font-semibold">Difficulty Level</Label>
+                <Select value={difficulty} onValueChange={setDifficulty}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="easy">🟢 Easy - Fundamental concepts</SelectItem>
+                    <SelectItem value="medium">🟡 Medium - Intermediate level</SelectItem>
+                    <SelectItem value="hard">🔴 Hard - Advanced challenges</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Summary */}
+              <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                <p className="text-sm font-semibold text-primary">Exam Summary:</p>
+                <div className="text-sm text-muted-foreground space-y-1">
+                  <p>• Subject: {subjectName}</p>
+                  <p>• {questionCount} questions ({difficulty} level)</p>
+                  <p>• {timeLimit} minutes time limit</p>
+                  <p>• Earn up to {parseInt(questionCount) * 10} XP</p>
+                </div>
+              </div>
+
+              {/* Start Button */}
+              <Button 
+                className="w-full" 
+                size="lg"
+                onClick={startExam}
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-background mr-2"></div>
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <Trophy className="h-4 w-4 mr-2" />
+                    Start Exam
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center gradient-dark">
@@ -160,7 +296,7 @@ const Exam = () => {
             </Button>
             <div>
               <h2 className="font-bold">{subjectName} Exam</h2>
-              <p className="text-sm text-muted-foreground">10 Questions</p>
+              <p className="text-sm text-muted-foreground">{questions.length} Questions • {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 text-accent font-mono text-lg">

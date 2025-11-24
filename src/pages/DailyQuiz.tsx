@@ -65,11 +65,23 @@ const DailyQuiz = () => {
     const { data, error } = await supabase
       .from('questions')
       .select('*')
+      .eq('difficulty', difficulty)
       .limit(100);
 
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
       navigate('/dashboard');
+      return;
+    }
+
+    if (!data || data.length < parseInt(questionCount)) {
+      toast({ 
+        title: "Not enough questions", 
+        description: `Only ${data?.length || 0} ${difficulty} questions available. Please select a different difficulty or reduce question count.`,
+        variant: "destructive" 
+      });
+      setLoading(false);
+      setShowConfig(true);
       return;
     }
 
