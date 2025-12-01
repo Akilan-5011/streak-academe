@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      attempt_details: {
+        Row: {
+          attempt_id: string
+          created_at: string
+          id: string
+          is_correct: boolean
+          question_id: string
+          user_answer: string
+        }
+        Insert: {
+          attempt_id: string
+          created_at?: string
+          id?: string
+          is_correct: boolean
+          question_id: string
+          user_answer: string
+        }
+        Update: {
+          attempt_id?: string
+          created_at?: string
+          id?: string
+          is_correct?: boolean
+          question_id?: string
+          user_answer?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attempt_details_attempt_id_fkey"
+            columns: ["attempt_id"]
+            isOneToOne: false
+            referencedRelation: "attempts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attempt_details_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attempts: {
         Row: {
           created_at: string
@@ -65,14 +107,85 @@ export type Database = {
           },
         ]
       }
+      badges: {
+        Row: {
+          badge_name: string
+          badge_type: string
+          earned_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          badge_name: string
+          badge_type: string
+          earned_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          badge_name?: string
+          badge_type?: string
+          earned_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "badges_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bookmarks: {
+        Row: {
+          created_at: string
+          id: string
+          question_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          question_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          question_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookmarks_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookmarks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
           current_streak: number
+          daily_xp: number | null
+          daily_xp_goal: number | null
           email: string
           id: string
           last_login_date: string
           last_quiz_date: string | null
+          last_xp_reset_date: string | null
           longest_streak: number
           name: string
           updated_at: string
@@ -81,10 +194,13 @@ export type Database = {
         Insert: {
           created_at?: string
           current_streak?: number
+          daily_xp?: number | null
+          daily_xp_goal?: number | null
           email: string
           id: string
           last_login_date?: string
           last_quiz_date?: string | null
+          last_xp_reset_date?: string | null
           longest_streak?: number
           name: string
           updated_at?: string
@@ -93,10 +209,13 @@ export type Database = {
         Update: {
           created_at?: string
           current_streak?: number
+          daily_xp?: number | null
+          daily_xp_goal?: number | null
           email?: string
           id?: string
           last_login_date?: string
           last_quiz_date?: string | null
+          last_xp_reset_date?: string | null
           longest_streak?: number
           name?: string
           updated_at?: string

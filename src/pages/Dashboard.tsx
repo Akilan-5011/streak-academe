@@ -3,9 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { Flame, Star, Calendar, BookOpen, History, User, LogOut, Trophy } from 'lucide-react';
+import { Flame, Star, Calendar, BookOpen, History, User, LogOut, Trophy, Award, Bookmark } from 'lucide-react';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { checkAndAwardBadges } from '@/utils/badgeChecker';
 
 interface Profile {
   name: string;
@@ -13,6 +16,9 @@ interface Profile {
   current_streak: number;
   longest_streak: number;
   last_quiz_date: string | null;
+  daily_xp: number;
+  daily_xp_goal: number;
+  last_xp_reset_date: string;
 }
 
 const Dashboard = () => {
@@ -21,6 +27,7 @@ const Dashboard = () => {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [canTakeQuiz, setCanTakeQuiz] = useState(true);
   const [nextQuizTime, setNextQuizTime] = useState<string>('');
+  const [badgeCount, setBadgeCount] = useState(0);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -32,6 +39,8 @@ const Dashboard = () => {
     if (user) {
       fetchProfile();
       checkStreakAndUpdate();
+      fetchBadgeCount();
+      checkAndAwardBadges(user.id);
     }
   }, [user]);
 
@@ -49,8 +58,35 @@ const Dashboard = () => {
       return;
     }
 
+    // Reset daily XP if it's a new day
+    const lastReset = new Date(data.last_xp_reset_date);
+    const today = new Date();
+    lastReset.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+
+    if (today.getTime() > lastReset.getTime()) {
+      await supabase
+        .from('profiles')
+        .update({
+          daily_xp: 0,
+          last_xp_reset_date: today.toISOString().split('T')[0]
+        })
+        .eq('id', user.id);
+      data.daily_xp = 0;
+      data.last_xp_reset_date = today.toISOString().split('T')[0];
+    }
+
     setProfile(data);
     checkQuizAvailability(data.last_quiz_date);
+  };
+
+  const fetchBadgeCount = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('badges')
+      .select('id')
+      .eq('user_id', user.id);
+    setBadgeCount(data?.length || 0);
   };
 
   const checkQuizAvailability = (lastQuizDate: string | null) => {
@@ -183,10 +219,36 @@ const Dashboard = () => {
             <h1 className="text-3xl font-bold mb-1">Welcome back,</h1>
             <p className="text-2xl font-bold text-primary">{profile.name}!</p>
           </div>
-          <Button variant="ghost" size="icon" onClick={signOut}>
-            <LogOut className="h-5 w-5" />
-          </Button>
+          <div className="flex gap-2">
+            <ThemeToggle />
+            <Button variant="ghost" size="icon" onClick={signOut}>
+              <LogOut className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
+
+        {/* Daily XP Goal */}
+        <Card className="border-accent/30 bg-gradient-to-br from-card to-accent/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Trophy className="h-4 w-4 text-accent" />
+                Daily XP Goal
+              </span>
+              <span className="text-lg">
+                {profile.daily_xp}/{profile.daily_xp_goal}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Progress value={(profile.daily_xp / profile.daily_xp_goal) * 100} className="h-2" />
+            <p className="text-xs text-muted-foreground mt-2">
+              {profile.daily_xp >= profile.daily_xp_goal 
+                ? "🎉 Goal completed! Great work!" 
+                : `${profile.daily_xp_goal - profile.daily_xp} XP to go!`}
+            </p>
+          </CardContent>
+        </Card>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-2 gap-4">
@@ -244,6 +306,44 @@ const Dashboard = () => {
 
         {/* Action Buttons */}
         <div className="grid gap-4">
+          <div className="grid grid-cols-2 gap-4">
+            <Button 
+              variant="outline" 
+              className="h-20"
+              onClick={() => navigate('/badges')}
+            >
+              <div className="text-center">
+                <Award className="h-6 w-6 mx-auto mb-1" />
+                <div className="font-semibold text-sm">Badges</div>
+                <div className="text-xs text-muted-foreground">{badgeCount} earned</div>
+              </div>
+            </Button>
+
+            <Button 
+              variant="outline" 
+              className="h-20"
+              onClick={() => navigate('/leaderboard')}
+            >
+              <div className="text-center">
+                <Trophy className="h-6 w-6 mx-auto mb-1" />
+                <div className="font-semibold text-sm">Leaderboard</div>
+                <div className="text-xs text-muted-foreground">Top players</div>
+              </div>
+            </Button>
+          </div>
+
+          <Button 
+            variant="outline" 
+            className="w-full justify-start h-auto p-4"
+            onClick={() => navigate('/bookmarks')}
+          >
+            <Bookmark className="h-5 w-5 mr-3" />
+            <div className="text-left">
+              <div className="font-semibold">Saved Questions</div>
+              <div className="text-xs text-muted-foreground">Review difficult questions</div>
+            </div>
+          </Button>
+
           <Button 
             variant="outline" 
             className="w-full justify-start h-auto p-4"

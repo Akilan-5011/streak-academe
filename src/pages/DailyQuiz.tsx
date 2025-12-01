@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { ArrowLeft, Clock, Trophy, Settings } from 'lucide-react';
+import { ArrowLeft, Clock, Trophy, Settings, Bookmark } from 'lucide-react';
 
 interface Question {
   id: string;
@@ -30,6 +30,7 @@ const DailyQuiz = () => {
   const [timeLeft, setTimeLeft] = useState(300);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [bookmarkedQuestions, setBookmarkedQuestions] = useState<Set<string>>(new Set());
   
   // Quiz configuration
   const [showConfig, setShowConfig] = useState(true);
@@ -107,10 +108,10 @@ const DailyQuiz = () => {
     const totalTime = parseInt(timeLimit) * 60;
     const timeTaken = totalTime - timeLeft;
 
-    // Update profile
+    // Update profile with XP and daily XP
     const { data: profile } = await supabase
       .from('profiles')
-      .select('xp')
+      .select('xp, daily_xp')
       .eq('id', user!.id)
       .single();
 
@@ -119,13 +120,14 @@ const DailyQuiz = () => {
         .from('profiles')
         .update({
           xp: profile.xp + xpEarned,
+          daily_xp: profile.daily_xp + xpEarned,
           last_quiz_date: new Date().toISOString()
         })
         .eq('id', user!.id);
     }
 
     // Save attempt
-    await supabase
+    const { data: attemptData } = await supabase
       .from('attempts')
       .insert({
         user_id: user!.id,
@@ -135,7 +137,21 @@ const DailyQuiz = () => {
         type: 'daily_quiz',
         subject_id: questions[0].subject_id,
         time_taken: timeTaken
-      });
+      })
+      .select()
+      .single();
+
+    // Save attempt details for review mode
+    if (attemptData) {
+      const attemptDetails = questions.map((q, index) => ({
+        attempt_id: attemptData.id,
+        question_id: q.id,
+        user_answer: answers[index] || '',
+        is_correct: answers[index] === q.correct_answer,
+      }));
+
+      await supabase.from('attempt_details').insert(attemptDetails);
+    }
 
     navigate('/results', { 
       state: { 
@@ -153,6 +169,19 @@ const DailyQuiz = () => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const toggleBookmark = async (questionId: string) => {
+    const isBookmarked = bookmarkedQuestions.has(questionId);
+    if (isBookmarked) {
+      await supabase.from('bookmarks').delete().eq('user_id', user!.id).eq('question_id', questionId);
+      setBookmarkedQuestions(prev => { const newSet = new Set(prev); newSet.delete(questionId); return newSet; });
+      toast({ title: "Bookmark removed" });
+    } else {
+      await supabase.from('bookmarks').insert({ user_id: user!.id, question_id: questionId });
+      setBookmarkedQuestions(prev => new Set([...prev, questionId]));
+      toast({ title: "Question bookmarked" });
+    }
   };
 
   // Configuration Screen
@@ -309,7 +338,22 @@ const DailyQuiz = () => {
         {/* Question Card */}
         <Card className="border-border/50">
           <CardHeader>
-            <CardTitle className="text-xl">{currentQuestion.question}</CardTitle>
+            <div className="flex items-start justify-between gap-4">
+              <CardTitle className="text-xl flex-1">{currentQuestion.question}</CardTitle>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => toggleBookmark(currentQuestion.id)}
+              >
+                <Bookmark
+                  className={`h-5 w-5 ${
+                    bookmarkedQuestions.has(currentQuestion.id)
+                      ? "fill-primary text-primary"
+                      : "text-muted-foreground"
+                  }`}
+                />
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <RadioGroup
