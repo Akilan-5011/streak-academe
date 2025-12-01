@@ -127,7 +127,7 @@ const History = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-3 gap-4 text-center">
+                  <div className="grid grid-cols-3 gap-4 text-center mb-3">
                     <div className="p-2 rounded-lg bg-muted/50">
                       <div className="text-sm text-muted-foreground">Score</div>
                       <div className="font-bold">
@@ -150,6 +150,14 @@ const History = () => {
                       </div>
                     </div>
                   </div>
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    size="sm"
+                    onClick={() => navigate('/review', { state: { attemptId: attempt.id } })}
+                  >
+                    📝 Review Answers
+                  </Button>
                 </CardContent>
               </Card>
             ))}
