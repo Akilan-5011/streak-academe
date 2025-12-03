@@ -134,6 +134,12 @@ const Dashboard = () => {
   const checkStreakAndUpdate = async () => {
     if (!user) return;
 
+    // Only check streak ONCE per browser session
+    const streakCheckedKey = `streak_checked_${user.id}`;
+    if (sessionStorage.getItem(streakCheckedKey)) {
+      return; // Already checked this session
+    }
+
     const { data, error } = await supabase
       .from('profiles')
       .select('last_login_date, current_streak, longest_streak')
@@ -142,18 +148,22 @@ const Dashboard = () => {
 
     if (error || !data) return;
 
-    const lastLogin = new Date(data.last_login_date);
-    const today = new Date();
+    // Parse dates properly to avoid timezone issues
+    const lastLoginStr = data.last_login_date;
+    const todayStr = new Date().toISOString().split('T')[0];
     
-    lastLogin.setHours(0, 0, 0, 0);
-    today.setHours(0, 0, 0, 0);
-    
+    // If same day string, no update needed
+    if (lastLoginStr === todayStr) {
+      sessionStorage.setItem(streakCheckedKey, 'true');
+      return;
+    }
+
+    // Calculate day difference using date strings
+    const lastLogin = new Date(lastLoginStr + 'T00:00:00');
+    const today = new Date(todayStr + 'T00:00:00');
     const daysDiff = Math.floor((today.getTime() - lastLogin.getTime()) / (1000 * 60 * 60 * 24));
 
-    if (daysDiff === 0) {
-      // Same day, no update
-      return;
-    } else if (daysDiff === 1) {
+    if (daysDiff === 1) {
       // Next day, increment streak
       const newStreak = data.current_streak + 1;
       const newLongest = Math.max(newStreak, data.longest_streak);
@@ -163,7 +173,7 @@ const Dashboard = () => {
         .update({
           current_streak: newStreak,
           longest_streak: newLongest,
-          last_login_date: today.toISOString().split('T')[0]
+          last_login_date: todayStr
         })
         .eq('id', user.id);
       
@@ -172,13 +182,13 @@ const Dashboard = () => {
         description: `You're on a ${newStreak}-day streak!` 
       });
       fetchProfile();
-    } else {
+    } else if (daysDiff > 1) {
       // Missed days, reset streak
       await supabase
         .from('profiles')
         .update({
           current_streak: 1,
-          last_login_date: today.toISOString().split('T')[0]
+          last_login_date: todayStr
         })
         .eq('id', user.id);
       
@@ -189,6 +199,9 @@ const Dashboard = () => {
       });
       fetchProfile();
     }
+
+    // Mark as checked for this session
+    sessionStorage.setItem(streakCheckedKey, 'true');
   };
 
   const getLevel = (xp: number) => {
