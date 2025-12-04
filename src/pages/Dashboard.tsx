@@ -6,9 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { Flame, Star, Calendar, BookOpen, User, LogOut, Trophy, Award } from 'lucide-react';
+import { Flame, Star, Calendar, BookOpen, User, LogOut, Trophy, Award, ScrollText } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { checkAndAwardBadges } from '@/utils/badgeChecker';
+import { checkAndAwardCertificates } from '@/utils/milestoneChecker';
 
 interface Profile {
   name: string;
@@ -28,6 +29,7 @@ const Dashboard = () => {
   const [canTakeQuiz, setCanTakeQuiz] = useState(true);
   const [nextQuizTime, setNextQuizTime] = useState<string>('');
   const [badgeCount, setBadgeCount] = useState(0);
+  const [certCount, setCertCount] = useState(0);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -40,7 +42,17 @@ const Dashboard = () => {
       fetchProfile();
       checkStreakAndUpdate();
       fetchBadgeCount();
+      fetchCertCount();
       checkAndAwardBadges(user.id);
+      checkAndAwardCertificates(user.id).then(newCerts => {
+        if (newCerts.length > 0) {
+          toast({ 
+            title: "🏆 New Certificate!", 
+            description: `You earned: ${newCerts.join(', ')}` 
+          });
+          fetchCertCount();
+        }
+      });
     }
   }, [user]);
 
@@ -87,6 +99,15 @@ const Dashboard = () => {
       .select('id')
       .eq('user_id', user.id);
     setBadgeCount(data?.length || 0);
+  };
+
+  const fetchCertCount = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('certificates')
+      .select('id')
+      .eq('user_id', user.id);
+    setCertCount(data?.length || 0);
   };
 
   const checkQuizAvailability = (lastQuizDate: string | null) => {
@@ -345,17 +366,31 @@ const Dashboard = () => {
             </Button>
           </div>
 
-          <Button 
-            variant="outline" 
-            className="w-full justify-start h-auto p-4"
-            onClick={() => navigate('/subjects')}
-          >
-            <BookOpen className="h-5 w-5 mr-3" />
-            <div className="text-left">
-              <div className="font-semibold">Take Exam</div>
-              <div className="text-xs text-muted-foreground">Practice with subject-specific quizzes</div>
-            </div>
-          </Button>
+          <div className="grid grid-cols-2 gap-4">
+            <Button 
+              variant="outline" 
+              className="h-20"
+              onClick={() => navigate('/certificates')}
+            >
+              <div className="text-center">
+                <ScrollText className="h-6 w-6 mx-auto mb-1" />
+                <div className="font-semibold text-sm">Certificates</div>
+                <div className="text-xs text-muted-foreground">{certCount} earned</div>
+              </div>
+            </Button>
+
+            <Button 
+              variant="outline" 
+              className="h-20"
+              onClick={() => navigate('/subjects')}
+            >
+              <div className="text-center">
+                <BookOpen className="h-6 w-6 mx-auto mb-1" />
+                <div className="font-semibold text-sm">Take Exam</div>
+                <div className="text-xs text-muted-foreground">Subject quizzes</div>
+              </div>
+            </Button>
+          </div>
 
           <Button 
             variant="outline" 
