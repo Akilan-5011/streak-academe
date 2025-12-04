@@ -175,6 +175,41 @@ export type Database = {
           },
         ]
       }
+      certificates: {
+        Row: {
+          earned_at: string
+          id: string
+          image_url: string | null
+          milestone_name: string
+          milestone_type: string
+          user_id: string
+        }
+        Insert: {
+          earned_at?: string
+          id?: string
+          image_url?: string | null
+          milestone_name: string
+          milestone_type: string
+          user_id: string
+        }
+        Update: {
+          earned_at?: string
+          id?: string
+          image_url?: string | null
+          milestone_name?: string
+          milestone_type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "certificates_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string

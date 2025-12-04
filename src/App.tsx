@@ -15,6 +15,7 @@ import Profile from "./pages/Profile";
 import Badges from "./pages/Badges";
 import Leaderboard from "./pages/Leaderboard";
 import Review from "./pages/Review";
+import Certificates from "./pages/Certificates";
 import NotFound from "./pages/NotFound";
 import { ThemeProvider } from "./components/ThemeProvider";
 
@@ -40,6 +41,7 @@ const App = () => (
               <Route path="/badges" element={<Badges />} />
               <Route path="/leaderboard" element={<Leaderboard />} />
               <Route path="/review" element={<Review />} />
+              <Route path="/certificates" element={<Certificates />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

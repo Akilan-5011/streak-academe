@@ -1,1 +1,4 @@
 project_id = "idchoxlyawlqnahtaspm"
+
+[functions.generate-certificate]
+verify_jwt = true
