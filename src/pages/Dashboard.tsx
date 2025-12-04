@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { Flame, Star, Calendar, BookOpen, User, LogOut, Trophy, Award, ScrollText } from 'lucide-react';
+import { Flame, Star, Calendar, BookOpen, User, LogOut, Trophy, Award, ScrollText, BarChart3 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { checkAndAwardBadges } from '@/utils/badgeChecker';
 import { checkAndAwardCertificates } from '@/utils/milestoneChecker';
@@ -392,17 +392,31 @@ const Dashboard = () => {
             </Button>
           </div>
 
-          <Button 
-            variant="outline" 
-            className="w-full justify-start h-auto p-4"
-            onClick={() => navigate('/profile')}
-          >
-            <User className="h-5 w-5 mr-3" />
-            <div className="text-left">
-              <div className="font-semibold">Profile</div>
-              <div className="text-xs text-muted-foreground">View and edit your profile</div>
-            </div>
-          </Button>
+          <div className="grid grid-cols-2 gap-4">
+            <Button 
+              variant="outline" 
+              className="h-20"
+              onClick={() => navigate('/progress')}
+            >
+              <div className="text-center">
+                <BarChart3 className="h-6 w-6 mx-auto mb-1" />
+                <div className="font-semibold text-sm">Analytics</div>
+                <div className="text-xs text-muted-foreground">Your progress</div>
+              </div>
+            </Button>
+
+            <Button 
+              variant="outline" 
+              className="h-20"
+              onClick={() => navigate('/profile')}
+            >
+              <div className="text-center">
+                <User className="h-6 w-6 mx-auto mb-1" />
+                <div className="font-semibold text-sm">Profile</div>
+                <div className="text-xs text-muted-foreground">Edit info</div>
+              </div>
+            </Button>
+          </div>
         </div>
       </div>
     </div>
