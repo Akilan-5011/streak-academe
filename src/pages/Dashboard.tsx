@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { Flame, Star, Calendar, BookOpen, History, User, LogOut, Trophy, Award, Bookmark } from 'lucide-react';
+import { Flame, Star, Calendar, BookOpen, User, LogOut, Trophy, Award } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { checkAndAwardBadges } from '@/utils/badgeChecker';
 
@@ -348,36 +348,12 @@ const Dashboard = () => {
           <Button 
             variant="outline" 
             className="w-full justify-start h-auto p-4"
-            onClick={() => navigate('/bookmarks')}
-          >
-            <Bookmark className="h-5 w-5 mr-3" />
-            <div className="text-left">
-              <div className="font-semibold">Saved Questions</div>
-              <div className="text-xs text-muted-foreground">Review difficult questions</div>
-            </div>
-          </Button>
-
-          <Button 
-            variant="outline" 
-            className="w-full justify-start h-auto p-4"
             onClick={() => navigate('/subjects')}
           >
             <BookOpen className="h-5 w-5 mr-3" />
             <div className="text-left">
               <div className="font-semibold">Take Exam</div>
               <div className="text-xs text-muted-foreground">Practice with subject-specific quizzes</div>
-            </div>
-          </Button>
-
-          <Button 
-            variant="outline" 
-            className="w-full justify-start h-auto p-4"
-            onClick={() => navigate('/history')}
-          >
-            <History className="h-5 w-5 mr-3" />
-            <div className="text-left">
-              <div className="font-semibold">Attempt History</div>
-              <div className="text-xs text-muted-foreground">View your past quiz results</div>
             </div>
           </Button>
 
