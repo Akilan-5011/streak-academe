@@ -5,11 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { ArrowLeft, BookOpen } from 'lucide-react';
+import { ArrowLeft, BookOpen, Youtube } from 'lucide-react';
 
 interface Subject {
   id: string;
   name: string;
+  youtube_link: string | null;
 }
 
 const Subjects = () => {
@@ -80,8 +81,7 @@ const Subjects = () => {
           {subjects.map((subject) => (
             <Card 
               key={subject.id} 
-              className="border-border/50 hover:border-primary/50 transition-all cursor-pointer hover:shadow-glow"
-              onClick={() => navigate('/exam', { state: { subjectId: subject.id, subjectName: subject.name } })}
+              className="border-border/50 hover:border-primary/50 transition-all"
             >
               <CardHeader>
                 <CardTitle className="flex items-center gap-3">
@@ -92,11 +92,28 @@ const Subjects = () => {
                   10 questions • Earn up to 100 XP
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <Button className="w-full" variant="outline">
+              <CardContent className="space-y-3">
+                <Button 
+                  className="w-full" 
+                  variant="outline"
+                  onClick={() => navigate('/exam', { state: { subjectId: subject.id, subjectName: subject.name } })}
+                >
                   <BookOpen className="h-4 w-4 mr-2" />
                   Start Exam
                 </Button>
+                {subject.youtube_link && (
+                  <Button 
+                    className="w-full bg-destructive hover:bg-destructive/80" 
+                    variant="default"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.open(subject.youtube_link!, '_blank');
+                    }}
+                  >
+                    <Youtube className="h-4 w-4 mr-2" />
+                    Watch YouTube Tutorials
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ))}
