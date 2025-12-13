@@ -310,16 +310,19 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          youtube_link: string | null
         }
         Insert: {
           created_at?: string
           id?: string
           name: string
+          youtube_link?: string | null
         }
         Update: {
           created_at?: string
           id?: string
           name?: string
+          youtube_link?: string | null
         }
         Relationships: []
       }
