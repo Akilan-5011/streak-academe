@@ -81,9 +81,9 @@ export const MILESTONES: Milestone[] = [
 export async function checkAndAwardCertificates(userId: string): Promise<string[]> {
   const newCertificates: string[] = [];
 
-  // Fetch user stats
+  // Fetch user stats and profile name
   const [profileResult, attemptsResult, badgesResult, certificatesResult] = await Promise.all([
-    supabase.from('profiles').select('xp, current_streak, longest_streak').eq('id', userId).single(),
+    supabase.from('profiles').select('name, xp, current_streak, longest_streak').eq('id', userId).single(),
     supabase.from('attempts').select('id').eq('user_id', userId),
     supabase.from('badges').select('id').eq('user_id', userId),
     supabase.from('certificates').select('milestone_type').eq('user_id', userId),
@@ -91,6 +91,7 @@ export async function checkAndAwardCertificates(userId: string): Promise<string[
 
   if (profileResult.error || !profileResult.data) return [];
 
+  const userName = profileResult.data.name;
   const stats: UserStats = {
     xp: profileResult.data.xp,
     current_streak: profileResult.data.current_streak,
@@ -104,18 +105,51 @@ export async function checkAndAwardCertificates(userId: string): Promise<string[
   // Check each milestone
   for (const milestone of MILESTONES) {
     if (!existingCertTypes.has(milestone.type) && milestone.requirement(stats)) {
-      // Award the certificate (without image yet)
-      const { error } = await supabase.from('certificates').insert({
+      // Insert certificate record first
+      const { data: certData, error: insertError } = await supabase.from('certificates').insert({
         user_id: userId,
         milestone_type: milestone.type,
         milestone_name: milestone.name,
-      });
+      }).select('id').single();
 
-      if (!error) {
+      if (!insertError && certData) {
         newCertificates.push(milestone.name);
+
+        // Call edge function to generate certificate image (async, don't wait)
+        generateCertificateImage(userId, certData.id, userName, milestone.name, milestone.type);
       }
     }
   }
 
   return newCertificates;
+}
+
+async function generateCertificateImage(
+  userId: string, 
+  certificateId: string, 
+  userName: string, 
+  milestoneName: string, 
+  milestoneType: string
+) {
+  try {
+    const response = await supabase.functions.invoke('generate-certificate', {
+      body: { userName, milestoneName, milestoneType }
+    });
+
+    if (response.error) {
+      console.error('Certificate generation error:', response.error);
+      return;
+    }
+
+    const imageUrl = response.data?.imageUrl;
+    if (imageUrl) {
+      // Update certificate with the generated image
+      await supabase.from('certificates')
+        .update({ image_url: imageUrl })
+        .eq('id', certificateId);
+      console.log('Certificate image saved for:', milestoneName);
+    }
+  } catch (error) {
+    console.error('Failed to generate certificate image:', error);
+  }
 }
