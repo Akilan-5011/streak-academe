@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { Flame, Star, Calendar, BookOpen, User, LogOut, Trophy, Award, ScrollText, BarChart3 } from 'lucide-react';
+import { Flame, Star, Calendar, BookOpen, User, LogOut, Trophy, Award, ScrollText, BarChart3, Target } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { checkAndAwardBadges } from '@/utils/badgeChecker';
 import { checkAndAwardCertificates } from '@/utils/milestoneChecker';
@@ -408,15 +408,27 @@ const Dashboard = () => {
             <Button 
               variant="outline" 
               className="h-20"
-              onClick={() => navigate('/profile')}
+              onClick={() => navigate('/study-planner')}
             >
               <div className="text-center">
-                <User className="h-6 w-6 mx-auto mb-1" />
-                <div className="font-semibold text-sm">Profile</div>
-                <div className="text-xs text-muted-foreground">Edit info</div>
+                <Target className="h-6 w-6 mx-auto mb-1" />
+                <div className="font-semibold text-sm">Study Planner</div>
+                <div className="text-xs text-muted-foreground">Focus areas</div>
               </div>
             </Button>
           </div>
+
+          <Button 
+            variant="outline" 
+            className="h-20 w-full"
+            onClick={() => navigate('/profile')}
+          >
+            <div className="text-center">
+              <User className="h-6 w-6 mx-auto mb-1" />
+              <div className="font-semibold text-sm">Profile</div>
+              <div className="text-xs text-muted-foreground">Edit info</div>
+            </div>
+          </Button>
         </div>
       </div>
     </div>
