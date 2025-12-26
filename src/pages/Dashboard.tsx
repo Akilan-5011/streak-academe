@@ -40,17 +40,26 @@ const Dashboard = () => {
   useEffect(() => {
     if (user) {
       fetchProfile();
-      checkStreakAndUpdate();
       fetchBadgeCount();
       fetchCertCount();
-      checkAndAwardBadges(user.id);
-      checkAndAwardCertificates(user.id).then(newCerts => {
-        if (newCerts.length > 0) {
-          toast({ 
-            title: "🏆 New Certificate!", 
-            description: `You earned: ${newCerts.join(', ')}` 
+      
+      // Check streak first, then badges/certificates
+      checkStreakAndUpdate().then(() => {
+        checkAndAwardBadges(user.id);
+        
+        // Only check certificates once per session to avoid duplicates
+        const certCheckedKey = `certs_checked_${user.id}`;
+        if (!sessionStorage.getItem(certCheckedKey)) {
+          checkAndAwardCertificates(user.id).then(newCerts => {
+            if (newCerts.length > 0) {
+              toast({ 
+                title: "🏆 New Certificate!", 
+                description: `You earned: ${newCerts.join(', ')}` 
+              });
+              fetchCertCount();
+            }
+            sessionStorage.setItem(certCheckedKey, 'true');
           });
-          fetchCertCount();
         }
       });
     }
