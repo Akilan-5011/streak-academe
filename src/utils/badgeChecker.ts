@@ -29,6 +29,18 @@ export const checkAndAwardBadges = async (userId: string) => {
     if (profile.current_streak >= 30) {
       await awardBadge(userId, "streak_30", "30-Day Streak");
     }
+    if (profile.current_streak >= 50) {
+      await awardBadge(userId, "streak_50", "50-Day Streak");
+    }
+    if (profile.current_streak >= 100) {
+      await awardBadge(userId, "streak_100", "100-Day Streak");
+    }
+    if (profile.current_streak >= 300) {
+      await awardBadge(userId, "streak_300", "300-Day Streak");
+    }
+    if (profile.current_streak >= 550) {
+      await awardBadge(userId, "streak_550", "550-Day Streak");
+    }
 
     // Check XP badge
     if (profile.xp >= 1000) {
