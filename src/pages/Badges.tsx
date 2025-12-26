@@ -14,9 +14,13 @@ interface Badge {
 }
 
 const BADGE_INFO = {
-  streak_3: { icon: Flame, color: "text-orange-500", description: "Maintained a 3-day streak" },
-  streak_7: { icon: Flame, color: "text-red-500", description: "Maintained a 7-day streak" },
-  streak_30: { icon: Flame, color: "text-purple-500", description: "Maintained a 30-day streak" },
+  streak_3: { icon: Flame, color: "text-orange-400", description: "Maintained a 3-day streak" },
+  streak_7: { icon: Flame, color: "text-orange-500", description: "Maintained a 7-day streak" },
+  streak_30: { icon: Flame, color: "text-red-500", description: "Maintained a 30-day streak" },
+  streak_50: { icon: Flame, color: "text-pink-500", description: "Maintained a 50-day streak" },
+  streak_100: { icon: Flame, color: "text-purple-500", description: "Maintained a 100-day streak" },
+  streak_300: { icon: Flame, color: "text-violet-500", description: "Maintained a 300-day streak" },
+  streak_550: { icon: Flame, color: "text-fuchsia-500", description: "Maintained a 550-day streak" },
   perfect_score: { icon: Target, color: "text-green-500", description: "Scored 100% on a quiz" },
   fast_thinker: { icon: Zap, color: "text-yellow-500", description: "Completed quiz in under 2 minutes" },
   subject_master: { icon: BookOpen, color: "text-blue-500", description: "Completed 10 quizzes in one subject" },
