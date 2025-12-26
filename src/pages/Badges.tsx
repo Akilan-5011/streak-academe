@@ -84,7 +84,7 @@ const Badges = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {allBadgeTypes.map((badgeType) => {
               const earned = earnedBadgeTypes.has(badgeType);
               const badge = badges.find(b => b.badge_type === badgeType);
