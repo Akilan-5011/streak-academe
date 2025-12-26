@@ -64,7 +64,7 @@ const Badges = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/5 p-6">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         <div className="flex items-center gap-4 mb-8">
           <Button variant="outline" size="icon" onClick={() => navigate("/dashboard")}>
             <ArrowLeft className="h-4 w-4" />
