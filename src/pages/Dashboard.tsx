@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useAdmin } from '@/hooks/useAdmin';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { Flame, Star, Calendar, BookOpen, User, LogOut, Trophy, Award, ScrollText, BarChart3, Target } from 'lucide-react';
+import { Flame, Star, Calendar, BookOpen, User, LogOut, Trophy, Award, ScrollText, BarChart3, Target, Shield } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { checkAndAwardBadges } from '@/utils/badgeChecker';
 import { checkAndAwardCertificates } from '@/utils/milestoneChecker';
@@ -25,6 +26,7 @@ interface Profile {
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user, signOut, loading } = useAuth();
+  const { isAdmin } = useAdmin();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [canTakeQuiz, setCanTakeQuiz] = useState(true);
   const [nextQuizTime, setNextQuizTime] = useState<string>('');
@@ -427,17 +429,33 @@ const Dashboard = () => {
             </Button>
           </div>
 
-          <Button 
-            variant="outline" 
-            className="h-20 w-full"
-            onClick={() => navigate('/profile')}
-          >
-            <div className="text-center">
-              <User className="h-6 w-6 mx-auto mb-1" />
-              <div className="font-semibold text-sm">Profile</div>
-              <div className="text-xs text-muted-foreground">Edit info</div>
-            </div>
-          </Button>
+          <div className="grid grid-cols-2 gap-4">
+            <Button 
+              variant="outline" 
+              className="h-20"
+              onClick={() => navigate('/profile')}
+            >
+              <div className="text-center">
+                <User className="h-6 w-6 mx-auto mb-1" />
+                <div className="font-semibold text-sm">Profile</div>
+                <div className="text-xs text-muted-foreground">Edit info</div>
+              </div>
+            </Button>
+
+            {isAdmin && (
+              <Button 
+                variant="outline" 
+                className="h-20 border-primary/50 bg-primary/5"
+                onClick={() => navigate('/admin')}
+              >
+                <div className="text-center">
+                  <Shield className="h-6 w-6 mx-auto mb-1 text-primary" />
+                  <div className="font-semibold text-sm text-primary">Admin Panel</div>
+                  <div className="text-xs text-muted-foreground">Manage content</div>
+                </div>
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>
