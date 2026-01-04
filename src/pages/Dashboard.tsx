@@ -1,33 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
-import { useAdmin } from '@/hooks/useAdmin';
+import { useMongoAuth, useMongoAdmin } from '@/hooks/useMongoAuth';
+import { mongodb } from '@/lib/mongodb';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { Flame, Star, Calendar, BookOpen, User, LogOut, Trophy, Award, ScrollText, BarChart3, Target, Shield } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { checkAndAwardBadges } from '@/utils/badgeChecker';
-import { checkAndAwardCertificates } from '@/utils/milestoneChecker';
-
-interface Profile {
-  name: string;
-  xp: number;
-  current_streak: number;
-  longest_streak: number;
-  last_quiz_date: string | null;
-  daily_xp: number;
-  daily_xp_goal: number;
-  last_xp_reset_date: string;
-}
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { user, signOut, loading } = useAuth();
-  const { isAdmin } = useAdmin();
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const { user, signOut, loading, refreshUser } = useMongoAuth();
+  const { isAdmin } = useMongoAdmin();
   const [canTakeQuiz, setCanTakeQuiz] = useState(true);
   const [nextQuizTime, setNextQuizTime] = useState<string>('');
   const [badgeCount, setBadgeCount] = useState(0);
@@ -41,83 +26,22 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (user) {
-      fetchProfile();
       fetchBadgeCount();
       fetchCertCount();
-      
-      // Check streak first, then badges/certificates
-      checkStreakAndUpdate().then(() => {
-        checkAndAwardBadges(user.id);
-        
-        // Only check certificates once per session to avoid duplicates
-        const certCheckedKey = `certs_checked_${user.id}`;
-        if (!sessionStorage.getItem(certCheckedKey)) {
-          checkAndAwardCertificates(user.id).then(newCerts => {
-            if (newCerts.length > 0) {
-              toast({ 
-                title: "🏆 New Certificate!", 
-                description: `You earned: ${newCerts.join(', ')}` 
-              });
-              fetchCertCount();
-            }
-            sessionStorage.setItem(certCheckedKey, 'true');
-          });
-        }
-      });
+      checkQuizAvailability(user.last_quiz_date);
+      checkStreakAndUpdate();
     }
   }, [user]);
 
-  const fetchProfile = async () => {
-    if (!user) return;
-
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single();
-
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-      return;
-    }
-
-    // Reset daily XP if it's a new day
-    const lastReset = new Date(data.last_xp_reset_date);
-    const today = new Date();
-    lastReset.setHours(0, 0, 0, 0);
-    today.setHours(0, 0, 0, 0);
-
-    if (today.getTime() > lastReset.getTime()) {
-      await supabase
-        .from('profiles')
-        .update({
-          daily_xp: 0,
-          last_xp_reset_date: today.toISOString().split('T')[0]
-        })
-        .eq('id', user.id);
-      data.daily_xp = 0;
-      data.last_xp_reset_date = today.toISOString().split('T')[0];
-    }
-
-    setProfile(data);
-    checkQuizAvailability(data.last_quiz_date);
-  };
-
   const fetchBadgeCount = async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from('badges')
-      .select('id')
-      .eq('user_id', user.id);
+    const { data } = await mongodb.find('badges', { user_id: user.id });
     setBadgeCount(data?.length || 0);
   };
 
   const fetchCertCount = async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from('certificates')
-      .select('id')
-      .eq('user_id', user.id);
+    const { data } = await mongodb.find('certificates', { user_id: user.id });
     setCertCount(data?.length || 0);
   };
 
@@ -166,73 +90,56 @@ const Dashboard = () => {
   const checkStreakAndUpdate = async () => {
     if (!user) return;
 
-    // Only check streak ONCE per browser session
     const streakCheckedKey = `streak_checked_${user.id}`;
     if (sessionStorage.getItem(streakCheckedKey)) {
-      return; // Already checked this session
+      return;
     }
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('last_login_date, current_streak, longest_streak')
-      .eq('id', user.id)
-      .single();
-
-    if (error || !data) return;
-
-    // Parse dates properly to avoid timezone issues
-    const lastLoginStr = data.last_login_date;
+    const lastLoginStr = user.last_login_date;
     const todayStr = new Date().toISOString().split('T')[0];
     
-    // If same day string, no update needed
     if (lastLoginStr === todayStr) {
       sessionStorage.setItem(streakCheckedKey, 'true');
       return;
     }
 
-    // Calculate day difference using date strings
     const lastLogin = new Date(lastLoginStr + 'T00:00:00');
     const today = new Date(todayStr + 'T00:00:00');
     const daysDiff = Math.floor((today.getTime() - lastLogin.getTime()) / (1000 * 60 * 60 * 24));
 
     if (daysDiff === 1) {
-      // Next day, increment streak
-      const newStreak = data.current_streak + 1;
-      const newLongest = Math.max(newStreak, data.longest_streak);
+      const newStreak = user.current_streak + 1;
+      const newLongest = Math.max(newStreak, user.longest_streak);
       
-      await supabase
-        .from('profiles')
-        .update({
+      await mongodb.updateOne('users', { _id: user.id }, {
+        $set: {
           current_streak: newStreak,
           longest_streak: newLongest,
           last_login_date: todayStr
-        })
-        .eq('id', user.id);
+        }
+      });
       
       toast({ 
         title: "🔥 Streak continued!", 
         description: `You're on a ${newStreak}-day streak!` 
       });
-      fetchProfile();
+      refreshUser();
     } else if (daysDiff > 1) {
-      // Missed days, reset streak
-      await supabase
-        .from('profiles')
-        .update({
+      await mongodb.updateOne('users', { _id: user.id }, {
+        $set: {
           current_streak: 1,
           last_login_date: todayStr
-        })
-        .eq('id', user.id);
+        }
+      });
       
       toast({ 
         title: "Streak reset", 
         description: "Start a new streak today!",
         variant: "destructive"
       });
-      fetchProfile();
+      refreshUser();
     }
 
-    // Mark as checked for this session
     sessionStorage.setItem(streakCheckedKey, 'true');
   };
 
@@ -242,7 +149,7 @@ const Dashboard = () => {
     return { name: 'Advanced', color: 'text-primary' };
   };
 
-  if (loading || !profile) {
+  if (loading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center gradient-dark">
         <div className="text-center">
@@ -253,7 +160,7 @@ const Dashboard = () => {
     );
   }
 
-  const level = getLevel(profile.xp);
+  const level = getLevel(user.xp);
 
   return (
     <div className="min-h-screen gradient-dark p-4 pb-20">
@@ -262,7 +169,7 @@ const Dashboard = () => {
         <div className="flex justify-between items-start">
           <div>
             <h1 className="text-3xl font-bold mb-1">Welcome back,</h1>
-            <p className="text-2xl font-bold text-primary">{profile.name}!</p>
+            <p className="text-2xl font-bold text-primary">{user.name}!</p>
           </div>
           <div className="flex gap-2">
             <ThemeToggle />
@@ -281,16 +188,16 @@ const Dashboard = () => {
                 Daily XP Goal
               </span>
               <span className="text-lg">
-                {profile.daily_xp}/{profile.daily_xp_goal}
+                {user.daily_xp}/{user.daily_xp_goal}
               </span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <Progress value={(profile.daily_xp / profile.daily_xp_goal) * 100} className="h-2" />
+            <Progress value={(user.daily_xp / user.daily_xp_goal) * 100} className="h-2" />
             <p className="text-xs text-muted-foreground mt-2">
-              {profile.daily_xp >= profile.daily_xp_goal 
+              {user.daily_xp >= user.daily_xp_goal 
                 ? "🎉 Goal completed! Great work!" 
-                : `${profile.daily_xp_goal - profile.daily_xp} XP to go!`}
+                : `${user.daily_xp_goal - user.daily_xp} XP to go!`}
             </p>
           </CardContent>
         </Card>
@@ -305,8 +212,8 @@ const Dashboard = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{profile.current_streak}</div>
-              <p className="text-xs text-muted-foreground">Best: {profile.longest_streak} days</p>
+              <div className="text-3xl font-bold">{user.current_streak}</div>
+              <p className="text-xs text-muted-foreground">Best: {user.longest_streak} days</p>
             </CardContent>
           </Card>
 
@@ -318,7 +225,7 @@ const Dashboard = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{profile.xp}</div>
+              <div className="text-3xl font-bold">{user.xp}</div>
               <p className={`text-xs font-semibold ${level.color}`}>{level.name}</p>
             </CardContent>
           </Card>

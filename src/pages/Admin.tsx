@@ -7,9 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { useAuth } from '@/hooks/useAuth';
-import { useAdmin } from '@/hooks/useAdmin';
-import { supabase } from '@/integrations/supabase/client';
+import { useMongoAuth, useMongoAdmin } from '@/hooks/useMongoAuth';
+import { mongodb } from '@/lib/mongodb';
 import { toast } from '@/hooks/use-toast';
 import { 
   ArrowLeft, 
@@ -33,7 +32,6 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -41,13 +39,13 @@ import {
 } from "@/components/ui/dialog";
 
 interface Subject {
-  id: string;
+  _id: string;
   name: string;
   youtube_link: string | null;
 }
 
 interface Question {
-  id: string;
+  _id: string;
   question: string;
   option_a: string;
   option_b: string;
@@ -60,8 +58,8 @@ interface Question {
 
 const Admin = () => {
   const navigate = useNavigate();
-  const { user, loading: authLoading } = useAuth();
-  const { isAdmin, loading: adminLoading } = useAdmin();
+  const { user, loading: authLoading } = useMongoAuth();
+  const { isAdmin, loading: adminLoading } = useMongoAdmin();
   
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -115,24 +113,20 @@ const Admin = () => {
   }, [selectedSubjectId]);
 
   const fetchSubjects = async () => {
-    const { data, error } = await supabase.from('subjects').select('*').order('name');
+    const { data, error } = await mongodb.find<Subject>('subjects', {}, { sort: { name: 1 } });
     if (error) {
       toast({ title: "Error", description: "Failed to fetch subjects", variant: "destructive" });
     } else {
       setSubjects(data || []);
       if (data && data.length > 0 && !selectedSubjectId) {
-        setSelectedSubjectId(data[0].id);
+        setSelectedSubjectId(data[0]._id);
       }
     }
     setLoadingData(false);
   };
 
   const fetchQuestions = async (subjectId: string) => {
-    const { data, error } = await supabase
-      .from('questions')
-      .select('*')
-      .eq('subject_id', subjectId)
-      .order('difficulty');
+    const { data, error } = await mongodb.find<Question>('questions', { subject_id: subjectId }, { sort: { difficulty: 1 } });
     if (error) {
       toast({ title: "Error", description: "Failed to fetch questions", variant: "destructive" });
     } else {
@@ -148,13 +142,14 @@ const Admin = () => {
     }
     
     setAddingSubject(true);
-    const { error } = await supabase.from('subjects').insert({
+    const { error } = await mongodb.insertOne('subjects', {
       name: newSubject.name.trim(),
-      youtube_link: newSubject.youtube_link.trim() || null
+      youtube_link: newSubject.youtube_link.trim() || null,
+      created_at: new Date().toISOString()
     });
     
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: error, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "Subject added successfully" });
       setNewSubject({ name: '', youtube_link: '' });
@@ -166,16 +161,15 @@ const Admin = () => {
   const handleUpdateSubject = async () => {
     if (!editingSubject) return;
     
-    const { error } = await supabase
-      .from('subjects')
-      .update({
+    const { error } = await mongodb.updateOne('subjects', { _id: editingSubject._id }, {
+      $set: {
         name: editingSubject.name,
         youtube_link: editingSubject.youtube_link
-      })
-      .eq('id', editingSubject.id);
+      }
+    });
     
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: error, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "Subject updated successfully" });
       setEditingSubject(null);
@@ -186,9 +180,12 @@ const Admin = () => {
   const handleDeleteSubject = async (id: string) => {
     if (!confirm('Are you sure? This will delete all questions in this subject.')) return;
     
-    const { error } = await supabase.from('subjects').delete().eq('id', id);
+    // Delete questions first
+    await mongodb.deleteMany('questions', { subject_id: id });
+    
+    const { error } = await mongodb.deleteOne('subjects', { _id: id });
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: error, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "Subject deleted successfully" });
       fetchSubjects();
@@ -207,17 +204,18 @@ const Admin = () => {
     }
     
     setAddingQuestion(true);
-    const { error } = await supabase.from('questions').insert({
+    const { error } = await mongodb.insertOne('questions', {
       ...newQuestion,
       question: newQuestion.question.trim(),
       option_a: newQuestion.option_a.trim(),
       option_b: newQuestion.option_b.trim(),
       option_c: newQuestion.option_c.trim(),
-      option_d: newQuestion.option_d.trim()
+      option_d: newQuestion.option_d.trim(),
+      created_at: new Date().toISOString()
     });
     
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: error, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "Question added successfully" });
       setNewQuestion({
@@ -240,9 +238,8 @@ const Admin = () => {
   const handleUpdateQuestion = async () => {
     if (!editingQuestion) return;
     
-    const { error } = await supabase
-      .from('questions')
-      .update({
+    const { error } = await mongodb.updateOne('questions', { _id: editingQuestion._id }, {
+      $set: {
         question: editingQuestion.question,
         option_a: editingQuestion.option_a,
         option_b: editingQuestion.option_b,
@@ -250,11 +247,11 @@ const Admin = () => {
         option_d: editingQuestion.option_d,
         correct_answer: editingQuestion.correct_answer,
         difficulty: editingQuestion.difficulty
-      })
-      .eq('id', editingQuestion.id);
+      }
+    });
     
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: error, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "Question updated successfully" });
       setEditingQuestion(null);
@@ -267,9 +264,9 @@ const Admin = () => {
   const handleDeleteQuestion = async (id: string) => {
     if (!confirm('Are you sure you want to delete this question?')) return;
     
-    const { error } = await supabase.from('questions').delete().eq('id', id);
+    const { error } = await mongodb.deleteOne('questions', { _id: id });
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: error, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "Question deleted successfully" });
       if (selectedSubjectId) {
@@ -302,7 +299,7 @@ const Admin = () => {
             <Shield className="w-8 h-8 text-primary" />
             <div>
               <h1 className="text-2xl font-bold">Admin Panel</h1>
-              <p className="text-muted-foreground text-sm">Manage subjects, questions, and content</p>
+              <p className="text-muted-foreground text-sm">Manage subjects, questions, and content (MongoDB)</p>
             </div>
           </div>
         </div>
@@ -340,7 +337,7 @@ const Admin = () => {
                       <Label htmlFor="subject-name">Subject Name</Label>
                       <Input
                         id="subject-name"
-                        placeholder="e.g., Mathematics"
+                        placeholder="e.g., Data Structures"
                         value={newSubject.name}
                         onChange={(e) => setNewSubject({ ...newSubject, name: e.target.value })}
                         className="bg-card/50"
@@ -377,7 +374,7 @@ const Admin = () => {
                   ) : (
                     <div className="space-y-2 max-h-[400px] overflow-y-auto">
                       {subjects.map((subject) => (
-                        <div key={subject.id} className="flex items-center justify-between p-3 bg-card/50 rounded-lg">
+                        <div key={subject._id} className="flex items-center justify-between p-3 bg-card/50 rounded-lg">
                           <span className="font-medium">{subject.name}</span>
                           <div className="flex gap-2">
                             <Dialog>
@@ -413,7 +410,7 @@ const Admin = () => {
                                 </DialogFooter>
                               </DialogContent>
                             </Dialog>
-                            <Button variant="ghost" size="icon" onClick={() => handleDeleteSubject(subject.id)}>
+                            <Button variant="ghost" size="icon" onClick={() => handleDeleteSubject(subject._id)}>
                               <Trash2 className="w-4 h-4 text-destructive" />
                             </Button>
                           </div>
@@ -451,7 +448,7 @@ const Admin = () => {
                           </SelectTrigger>
                           <SelectContent>
                             {subjects.map((s) => (
-                              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                              <SelectItem key={s._id} value={s._id}>{s.name}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -480,15 +477,14 @@ const Admin = () => {
                         placeholder="Enter your question..."
                         value={newQuestion.question}
                         onChange={(e) => setNewQuestion({ ...newQuestion, question: e.target.value })}
-                        className="bg-card/50 min-h-[100px]"
+                        className="bg-card/50"
                       />
                     </div>
-                    
+
                     <div className="grid gap-4 md:grid-cols-2">
                       <div className="space-y-2">
                         <Label>Option A</Label>
                         <Input
-                          placeholder="Option A"
                           value={newQuestion.option_a}
                           onChange={(e) => setNewQuestion({ ...newQuestion, option_a: e.target.value })}
                           className="bg-card/50"
@@ -497,7 +493,6 @@ const Admin = () => {
                       <div className="space-y-2">
                         <Label>Option B</Label>
                         <Input
-                          placeholder="Option B"
                           value={newQuestion.option_b}
                           onChange={(e) => setNewQuestion({ ...newQuestion, option_b: e.target.value })}
                           className="bg-card/50"
@@ -506,7 +501,6 @@ const Admin = () => {
                       <div className="space-y-2">
                         <Label>Option C</Label>
                         <Input
-                          placeholder="Option C"
                           value={newQuestion.option_c}
                           onChange={(e) => setNewQuestion({ ...newQuestion, option_c: e.target.value })}
                           className="bg-card/50"
@@ -515,14 +509,13 @@ const Admin = () => {
                       <div className="space-y-2">
                         <Label>Option D</Label>
                         <Input
-                          placeholder="Option D"
                           value={newQuestion.option_d}
                           onChange={(e) => setNewQuestion({ ...newQuestion, option_d: e.target.value })}
                           className="bg-card/50"
                         />
                       </div>
                     </div>
-                    
+
                     <div className="space-y-2">
                       <Label>Correct Answer</Label>
                       <Select
@@ -540,7 +533,7 @@ const Admin = () => {
                         </SelectContent>
                       </Select>
                     </div>
-                    
+
                     <Button type="submit" disabled={addingQuestion}>
                       {addingQuestion ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
                       Add Question
@@ -555,148 +548,141 @@ const Admin = () => {
                   <div className="flex items-center justify-between">
                     <CardTitle>Questions</CardTitle>
                     <Select value={selectedSubjectId} onValueChange={setSelectedSubjectId}>
-                      <SelectTrigger className="w-[200px] bg-card/50">
+                      <SelectTrigger className="w-[200px]">
                         <SelectValue placeholder="Select subject" />
                       </SelectTrigger>
                       <SelectContent>
                         {subjects.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                          <SelectItem key={s._id} value={s._id}>{s.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {questions.length === 0 ? (
-                    <p className="text-center text-muted-foreground py-8">No questions found for this subject</p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Question</TableHead>
-                            <TableHead>Difficulty</TableHead>
-                            <TableHead>Answer</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {questions.map((q) => (
-                            <TableRow key={q.id}>
-                              <TableCell className="max-w-[300px] truncate">{q.question}</TableCell>
-                              <TableCell>
-                                <span className={`px-2 py-1 rounded text-xs ${
-                                  q.difficulty === 'easy' ? 'bg-green-500/20 text-green-400' :
-                                  q.difficulty === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
-                                  'bg-red-500/20 text-red-400'
-                                }`}>
-                                  {q.difficulty}
-                                </span>
-                              </TableCell>
-                              <TableCell>{q.correct_answer}</TableCell>
-                              <TableCell className="text-right">
-                                <Dialog>
-                                  <DialogTrigger asChild>
-                                    <Button variant="ghost" size="icon" onClick={() => setEditingQuestion(q)}>
-                                      <Edit className="w-4 h-4" />
-                                    </Button>
-                                  </DialogTrigger>
-                                  <DialogContent className="max-w-2xl">
-                                    <DialogHeader>
-                                      <DialogTitle>Edit Question</DialogTitle>
-                                    </DialogHeader>
-                                    {editingQuestion && (
-                                      <div className="space-y-4">
-                                        <div className="space-y-2">
-                                          <Label>Question</Label>
-                                          <Textarea
-                                            value={editingQuestion.question}
-                                            onChange={(e) => setEditingQuestion({ ...editingQuestion, question: e.target.value })}
-                                            className="min-h-[100px]"
-                                          />
-                                        </div>
-                                        <div className="grid gap-4 md:grid-cols-2">
-                                          <div className="space-y-2">
-                                            <Label>Option A</Label>
-                                            <Input
-                                              value={editingQuestion.option_a}
-                                              onChange={(e) => setEditingQuestion({ ...editingQuestion, option_a: e.target.value })}
-                                            />
-                                          </div>
-                                          <div className="space-y-2">
-                                            <Label>Option B</Label>
-                                            <Input
-                                              value={editingQuestion.option_b}
-                                              onChange={(e) => setEditingQuestion({ ...editingQuestion, option_b: e.target.value })}
-                                            />
-                                          </div>
-                                          <div className="space-y-2">
-                                            <Label>Option C</Label>
-                                            <Input
-                                              value={editingQuestion.option_c}
-                                              onChange={(e) => setEditingQuestion({ ...editingQuestion, option_c: e.target.value })}
-                                            />
-                                          </div>
-                                          <div className="space-y-2">
-                                            <Label>Option D</Label>
-                                            <Input
-                                              value={editingQuestion.option_d}
-                                              onChange={(e) => setEditingQuestion({ ...editingQuestion, option_d: e.target.value })}
-                                            />
-                                          </div>
-                                        </div>
-                                        <div className="grid gap-4 md:grid-cols-2">
-                                          <div className="space-y-2">
-                                            <Label>Correct Answer</Label>
-                                            <Select
-                                              value={editingQuestion.correct_answer}
-                                              onValueChange={(val) => setEditingQuestion({ ...editingQuestion, correct_answer: val })}
-                                            >
-                                              <SelectTrigger>
-                                                <SelectValue />
-                                              </SelectTrigger>
-                                              <SelectContent>
-                                                <SelectItem value="A">A</SelectItem>
-                                                <SelectItem value="B">B</SelectItem>
-                                                <SelectItem value="C">C</SelectItem>
-                                                <SelectItem value="D">D</SelectItem>
-                                              </SelectContent>
-                                            </Select>
-                                          </div>
-                                          <div className="space-y-2">
-                                            <Label>Difficulty</Label>
-                                            <Select
-                                              value={editingQuestion.difficulty}
-                                              onValueChange={(val) => setEditingQuestion({ ...editingQuestion, difficulty: val })}
-                                            >
-                                              <SelectTrigger>
-                                                <SelectValue />
-                                              </SelectTrigger>
-                                              <SelectContent>
-                                                <SelectItem value="easy">Easy</SelectItem>
-                                                <SelectItem value="medium">Medium</SelectItem>
-                                                <SelectItem value="hard">Hard</SelectItem>
-                                              </SelectContent>
-                                            </Select>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    )}
-                                    <DialogFooter>
-                                      <Button onClick={handleUpdateQuestion}>Save Changes</Button>
-                                    </DialogFooter>
-                                  </DialogContent>
-                                </Dialog>
-                                <Button variant="ghost" size="icon" onClick={() => handleDeleteQuestion(q.id)}>
-                                  <Trash2 className="w-4 h-4 text-destructive" />
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Question</TableHead>
+                        <TableHead>Difficulty</TableHead>
+                        <TableHead>Answer</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {questions.map((q) => (
+                        <TableRow key={q._id}>
+                          <TableCell className="max-w-[300px] truncate">{q.question}</TableCell>
+                          <TableCell>
+                            <span className={`px-2 py-1 rounded text-xs ${
+                              q.difficulty === 'easy' ? 'bg-green-500/20 text-green-500' :
+                              q.difficulty === 'medium' ? 'bg-yellow-500/20 text-yellow-500' :
+                              'bg-red-500/20 text-red-500'
+                            }`}>
+                              {q.difficulty}
+                            </span>
+                          </TableCell>
+                          <TableCell>{q.correct_answer}</TableCell>
+                          <TableCell className="text-right">
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button variant="ghost" size="icon" onClick={() => setEditingQuestion(q)}>
+                                  <Edit className="w-4 h-4" />
                                 </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )}
+                              </DialogTrigger>
+                              <DialogContent className="max-w-2xl">
+                                <DialogHeader>
+                                  <DialogTitle>Edit Question</DialogTitle>
+                                </DialogHeader>
+                                {editingQuestion && (
+                                  <div className="space-y-4">
+                                    <div className="space-y-2">
+                                      <Label>Question</Label>
+                                      <Textarea
+                                        value={editingQuestion.question}
+                                        onChange={(e) => setEditingQuestion({ ...editingQuestion, question: e.target.value })}
+                                      />
+                                    </div>
+                                    <div className="grid gap-4 md:grid-cols-2">
+                                      <div className="space-y-2">
+                                        <Label>Option A</Label>
+                                        <Input
+                                          value={editingQuestion.option_a}
+                                          onChange={(e) => setEditingQuestion({ ...editingQuestion, option_a: e.target.value })}
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label>Option B</Label>
+                                        <Input
+                                          value={editingQuestion.option_b}
+                                          onChange={(e) => setEditingQuestion({ ...editingQuestion, option_b: e.target.value })}
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label>Option C</Label>
+                                        <Input
+                                          value={editingQuestion.option_c}
+                                          onChange={(e) => setEditingQuestion({ ...editingQuestion, option_c: e.target.value })}
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label>Option D</Label>
+                                        <Input
+                                          value={editingQuestion.option_d}
+                                          onChange={(e) => setEditingQuestion({ ...editingQuestion, option_d: e.target.value })}
+                                        />
+                                      </div>
+                                    </div>
+                                    <div className="grid gap-4 md:grid-cols-2">
+                                      <div className="space-y-2">
+                                        <Label>Correct Answer</Label>
+                                        <Select
+                                          value={editingQuestion.correct_answer}
+                                          onValueChange={(val) => setEditingQuestion({ ...editingQuestion, correct_answer: val })}
+                                        >
+                                          <SelectTrigger>
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="A">A</SelectItem>
+                                            <SelectItem value="B">B</SelectItem>
+                                            <SelectItem value="C">C</SelectItem>
+                                            <SelectItem value="D">D</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label>Difficulty</Label>
+                                        <Select
+                                          value={editingQuestion.difficulty}
+                                          onValueChange={(val) => setEditingQuestion({ ...editingQuestion, difficulty: val })}
+                                        >
+                                          <SelectTrigger>
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="easy">Easy</SelectItem>
+                                            <SelectItem value="medium">Medium</SelectItem>
+                                            <SelectItem value="hard">Hard</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                                <DialogFooter>
+                                  <Button onClick={handleUpdateQuestion}>Save Changes</Button>
+                                </DialogFooter>
+                              </DialogContent>
+                            </Dialog>
+                            <Button variant="ghost" size="icon" onClick={() => handleDeleteQuestion(q._id)}>
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </CardContent>
               </Card>
             </div>
@@ -707,48 +693,49 @@ const Admin = () => {
             <Card className="glass cyber-border">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Youtube className="w-5 h-5 text-red-500" />
-                  Manage YouTube Links
+                  <Youtube className="w-5 h-5 text-destructive" />
+                  YouTube Study Links
                 </CardTitle>
-                <CardDescription>Add or update YouTube tutorial links for each subject</CardDescription>
+                <CardDescription>Manage YouTube tutorial links for each subject</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   {subjects.map((subject) => (
-                    <div key={subject.id} className="flex items-center gap-4 p-4 bg-card/50 rounded-lg">
+                    <div key={subject._id} className="flex items-center gap-4 p-4 bg-card/50 rounded-lg">
                       <div className="flex-1">
-                        <h3 className="font-medium">{subject.name}</h3>
-                        <Input
-                          placeholder="https://youtube.com/..."
-                          defaultValue={subject.youtube_link || ''}
-                          className="mt-2 bg-background/50"
-                          onBlur={async (e) => {
-                            const value = e.target.value.trim();
-                            if (value !== (subject.youtube_link || '')) {
-                              const { error } = await supabase
-                                .from('subjects')
-                                .update({ youtube_link: value || null })
-                                .eq('id', subject.id);
-                              if (error) {
-                                toast({ title: "Error", description: error.message, variant: "destructive" });
-                              } else {
-                                toast({ title: "Success", description: "YouTube link updated" });
-                                fetchSubjects();
-                              }
-                            }
-                          }}
-                        />
+                        <p className="font-medium">{subject.name}</p>
+                        <p className="text-sm text-muted-foreground truncate">
+                          {subject.youtube_link || 'No link added'}
+                        </p>
                       </div>
-                      {subject.youtube_link && (
-                        <a
-                          href={subject.youtube_link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-red-500 hover:text-red-400"
-                        >
-                          <Youtube className="w-6 h-6" />
-                        </a>
-                      )}
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" onClick={() => setEditingSubject(subject)}>
+                            <Edit className="w-4 h-4 mr-2" />
+                            Edit Link
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Edit YouTube Link - {subject.name}</DialogTitle>
+                          </DialogHeader>
+                          {editingSubject && editingSubject._id === subject._id && (
+                            <div className="space-y-4">
+                              <div className="space-y-2">
+                                <Label>YouTube Link</Label>
+                                <Input
+                                  value={editingSubject.youtube_link || ''}
+                                  onChange={(e) => setEditingSubject({ ...editingSubject, youtube_link: e.target.value })}
+                                  placeholder="https://youtube.com/..."
+                                />
+                              </div>
+                            </div>
+                          )}
+                          <DialogFooter>
+                            <Button onClick={handleUpdateSubject}>Save Link</Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
                     </div>
                   ))}
                 </div>

@@ -1,27 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
+import { useMongoAuth } from '@/hooks/useMongoAuth';
+import { mongodb } from '@/lib/mongodb';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { ArrowLeft, User, Mail, Star, Trophy, Flame, Calendar } from 'lucide-react';
 
-interface Profile {
-  name: string;
-  email: string;
-  xp: number;
-  current_streak: number;
-  longest_streak: number;
-  created_at: string;
-}
-
 const Profile = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const { user, refreshUser } = useMongoAuth();
   const [name, setName] = useState('');
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -32,34 +22,15 @@ const Profile = () => {
       navigate('/auth');
       return;
     }
-    fetchProfile();
+    setName(user.name);
     fetchQuizCount();
+    setLoading(false);
   }, [user]);
 
-  const fetchProfile = async () => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user!.id)
-      .single();
-
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-      return;
-    }
-
-    setProfile(data);
-    setName(data.name);
-    setLoading(false);
-  };
-
   const fetchQuizCount = async () => {
-    const { count } = await supabase
-      .from('attempts')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user!.id);
-
-    setTotalQuizzes(count || 0);
+    if (!user) return;
+    const { data } = await mongodb.count('attempts', { user_id: user.id });
+    setTotalQuizzes(typeof data === 'number' ? data : 0);
   };
 
   const handleUpdateName = async () => {
@@ -68,19 +39,18 @@ const Profile = () => {
       return;
     }
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({ name: name.trim() })
-      .eq('id', user!.id);
+    const { error } = await mongodb.updateOne('users', { _id: user!.id }, {
+      $set: { name: name.trim() }
+    });
 
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: error, variant: "destructive" });
       return;
     }
 
     toast({ title: "Success!", description: "Profile updated successfully" });
     setEditing(false);
-    fetchProfile();
+    refreshUser();
   };
 
   const getLevel = (xp: number) => {
@@ -89,7 +59,7 @@ const Profile = () => {
     return { name: 'Advanced', color: 'text-primary', icon: '🚀' };
   };
 
-  if (loading || !profile) {
+  if (loading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center gradient-dark">
         <div className="text-center">
@@ -100,7 +70,7 @@ const Profile = () => {
     );
   }
 
-  const level = getLevel(profile.xp);
+  const level = getLevel(user.xp);
 
   return (
     <div className="min-h-screen gradient-dark p-4">
@@ -136,7 +106,7 @@ const Profile = () => {
                   <Button onClick={handleUpdateName}>Save</Button>
                   <Button variant="outline" onClick={() => {
                     setEditing(false);
-                    setName(profile.name);
+                    setName(user.name);
                   }}>
                     Cancel
                   </Button>
@@ -145,7 +115,7 @@ const Profile = () => {
                 <div className="flex items-center gap-2">
                   <div className="flex-1 p-2 rounded-lg bg-muted/50 flex items-center gap-2">
                     <User className="h-4 w-4 text-muted-foreground" />
-                    <span>{profile.name}</span>
+                    <span>{user.name}</span>
                   </div>
                   <Button variant="outline" onClick={() => setEditing(true)}>
                     Edit
@@ -158,7 +128,7 @@ const Profile = () => {
               <Label htmlFor="email">Email</Label>
               <div className="p-2 rounded-lg bg-muted/50 flex items-center gap-2">
                 <Mail className="h-4 w-4 text-muted-foreground" />
-                <span>{profile.email}</span>
+                <span>{user.email}</span>
               </div>
             </div>
           </CardContent>
@@ -177,7 +147,7 @@ const Profile = () => {
                   <Star className="h-5 w-5" />
                   <span className="font-semibold">Total XP</span>
                 </div>
-                <div className="text-3xl font-bold">{profile.xp}</div>
+                <div className="text-3xl font-bold">{user.xp}</div>
                 <div className={`text-sm font-semibold ${level.color} flex items-center gap-1 mt-1`}>
                   <span>{level.icon}</span>
                   <span>{level.name}</span>
@@ -189,9 +159,9 @@ const Profile = () => {
                   <Flame className="h-5 w-5" />
                   <span className="font-semibold">Streak</span>
                 </div>
-                <div className="text-3xl font-bold">{profile.current_streak}</div>
+                <div className="text-3xl font-bold">{user.current_streak}</div>
                 <div className="text-sm text-muted-foreground mt-1">
-                  Best: {profile.longest_streak} days
+                  Best: {user.longest_streak} days
                 </div>
               </div>
 
@@ -209,16 +179,13 @@ const Profile = () => {
               <div className="p-4 rounded-lg bg-muted/50">
                 <div className="flex items-center gap-2 text-info mb-2">
                   <Calendar className="h-5 w-5" />
-                  <span className="font-semibold">Member</span>
+                  <span className="font-semibold">Role</span>
                 </div>
-                <div className="text-sm font-bold">
-                  {new Date(profile.created_at).toLocaleDateString('en-US', { 
-                    month: 'short', 
-                    year: 'numeric' 
-                  })}
+                <div className="text-sm font-bold capitalize">
+                  {user.role}
                 </div>
                 <div className="text-sm text-muted-foreground mt-1">
-                  Joined
+                  Account type
                 </div>
               </div>
             </div>

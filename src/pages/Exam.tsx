@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
+import { useMongoAuth } from '@/hooks/useMongoAuth';
+import { mongodb } from '@/lib/mongodb';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { ArrowLeft, Clock, Trophy, Settings } from 'lucide-react';
 
 interface Question {
-  id: string;
+  _id: string;
   question: string;
   option_a: string;
   option_b: string;
@@ -24,7 +24,7 @@ interface Question {
 const Exam = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, refreshUser } = useMongoAuth();
   const { subjectId, subjectName } = location.state || {};
   
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -65,14 +65,13 @@ const Exam = () => {
 
   const startExam = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('questions')
-      .select('*')
-      .eq('subject_id', subjectId)
-      .eq('difficulty', difficulty);
+    const { data, error } = await mongodb.find<Question>('questions', {
+      subject_id: subjectId,
+      difficulty: difficulty
+    });
 
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: error, variant: "destructive" });
       navigate('/subjects');
       return;
     }
@@ -110,34 +109,24 @@ const Exam = () => {
     const totalTime = parseInt(timeLimit) * 60;
     const timeTaken = totalTime - timeLeft;
 
-    // Update profile XP
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('xp')
-      .eq('id', user!.id)
-      .single();
-
-    if (profile) {
-      await supabase
-        .from('profiles')
-        .update({
-          xp: profile.xp + xpEarned
-        })
-        .eq('id', user!.id);
-    }
+    // Update user XP
+    await mongodb.updateOne('users', { _id: user!.id }, {
+      $inc: { xp: xpEarned }
+    });
 
     // Save attempt
-    await supabase
-      .from('attempts')
-      .insert({
-        user_id: user!.id,
-        score,
-        total_questions: questions.length,
-        percentage,
-        type: 'exam',
-        subject_id: subjectId,
-        time_taken: timeTaken
-      });
+    await mongodb.insertOne('attempts', {
+      user_id: user!.id,
+      score,
+      total_questions: questions.length,
+      percentage,
+      type: 'exam',
+      subject_id: subjectId,
+      time_taken: timeTaken,
+      created_at: new Date().toISOString()
+    });
+
+    refreshUser();
 
     navigate('/results', { 
       state: { 
@@ -195,8 +184,6 @@ const Exam = () => {
                     <SelectItem value="5">5 Questions</SelectItem>
                     <SelectItem value="10">10 Questions</SelectItem>
                     <SelectItem value="15">15 Questions</SelectItem>
-                    <SelectItem value="20">20 Questions</SelectItem>
-                    <SelectItem value="30">30 Questions</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -214,8 +201,6 @@ const Exam = () => {
                     <SelectItem value="15">15 Minutes</SelectItem>
                     <SelectItem value="20">20 Minutes</SelectItem>
                     <SelectItem value="30">30 Minutes</SelectItem>
-                    <SelectItem value="45">45 Minutes</SelectItem>
-                    <SelectItem value="60">60 Minutes</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
+import { useMongoAuth } from '@/hooks/useMongoAuth';
+import { mongodb } from '@/lib/mongodb';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { ArrowLeft, Clock, Trophy, Settings, Bookmark } from 'lucide-react';
 
 interface Question {
-  id: string;
+  _id: string;
   question: string;
   option_a: string;
   option_b: string;
@@ -23,7 +23,7 @@ interface Question {
 
 const DailyQuiz = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, refreshUser } = useMongoAuth();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
@@ -63,14 +63,10 @@ const DailyQuiz = () => {
 
   const startQuiz = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('questions')
-      .select('*')
-      .eq('difficulty', difficulty)
-      .limit(100);
+    const { data, error } = await mongodb.find<Question>('questions', { difficulty });
 
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: error, variant: "destructive" });
       navigate('/dashboard');
       return;
     }
@@ -90,7 +86,7 @@ const DailyQuiz = () => {
     const shuffled = data.sort(() => 0.5 - Math.random());
     const selected = shuffled.slice(0, parseInt(questionCount));
     setQuestions(selected);
-    setTimeLeft(parseInt(timeLimit) * 60); // Convert minutes to seconds
+    setTimeLeft(parseInt(timeLimit) * 60);
     setShowConfig(false);
     setLoading(false);
   };
@@ -108,50 +104,25 @@ const DailyQuiz = () => {
     const totalTime = parseInt(timeLimit) * 60;
     const timeTaken = totalTime - timeLeft;
 
-    // Update profile with XP and daily XP
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('xp, daily_xp')
-      .eq('id', user!.id)
-      .single();
-
-    if (profile) {
-      await supabase
-        .from('profiles')
-        .update({
-          xp: profile.xp + xpEarned,
-          daily_xp: profile.daily_xp + xpEarned,
-          last_quiz_date: new Date().toISOString()
-        })
-        .eq('id', user!.id);
-    }
+    // Update user XP and daily XP
+    await mongodb.updateOne('users', { _id: user!.id }, {
+      $inc: { xp: xpEarned, daily_xp: xpEarned },
+      $set: { last_quiz_date: new Date().toISOString() }
+    });
 
     // Save attempt
-    const { data: attemptData } = await supabase
-      .from('attempts')
-      .insert({
-        user_id: user!.id,
-        score,
-        total_questions: questions.length,
-        percentage,
-        type: 'daily_quiz',
-        subject_id: questions[0].subject_id,
-        time_taken: timeTaken
-      })
-      .select()
-      .single();
+    await mongodb.insertOne('attempts', {
+      user_id: user!.id,
+      score,
+      total_questions: questions.length,
+      percentage,
+      type: 'daily_quiz',
+      subject_id: questions[0].subject_id,
+      time_taken: timeTaken,
+      created_at: new Date().toISOString()
+    });
 
-    // Save attempt details for review mode
-    if (attemptData) {
-      const attemptDetails = questions.map((q, index) => ({
-        attempt_id: attemptData.id,
-        question_id: q.id,
-        user_answer: answers[index] || '',
-        is_correct: answers[index] === q.correct_answer,
-      }));
-
-      await supabase.from('attempt_details').insert(attemptDetails);
-    }
+    refreshUser();
 
     navigate('/results', { 
       state: { 
@@ -174,11 +145,11 @@ const DailyQuiz = () => {
   const toggleBookmark = async (questionId: string) => {
     const isBookmarked = bookmarkedQuestions.has(questionId);
     if (isBookmarked) {
-      await supabase.from('bookmarks').delete().eq('user_id', user!.id).eq('question_id', questionId);
+      await mongodb.deleteOne('bookmarks', { user_id: user!.id, question_id: questionId });
       setBookmarkedQuestions(prev => { const newSet = new Set(prev); newSet.delete(questionId); return newSet; });
       toast({ title: "Bookmark removed" });
     } else {
-      await supabase.from('bookmarks').insert({ user_id: user!.id, question_id: questionId });
+      await mongodb.insertOne('bookmarks', { user_id: user!.id, question_id: questionId, created_at: new Date().toISOString() });
       setBookmarkedQuestions(prev => new Set([...prev, questionId]));
       toast({ title: "Question bookmarked" });
     }
@@ -221,7 +192,6 @@ const DailyQuiz = () => {
                     <SelectItem value="5">5 Questions</SelectItem>
                     <SelectItem value="10">10 Questions</SelectItem>
                     <SelectItem value="15">15 Questions</SelectItem>
-                    <SelectItem value="20">20 Questions</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -343,11 +313,11 @@ const DailyQuiz = () => {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => toggleBookmark(currentQuestion.id)}
+                onClick={() => toggleBookmark(currentQuestion._id)}
               >
                 <Bookmark
                   className={`h-5 w-5 ${
-                    bookmarkedQuestions.has(currentQuestion.id)
+                    bookmarkedQuestions.has(currentQuestion._id)
                       ? "fill-primary text-primary"
                       : "text-muted-foreground"
                   }`}

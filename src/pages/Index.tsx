@@ -1,13 +1,13 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
+import { useMongoAuth } from '@/hooks/useMongoAuth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Brain, Sparkles, Trophy, Zap, Target } from 'lucide-react';
 
 const Index = () => {
   const navigate = useNavigate();
-  const { user, loading } = useAuth();
+  const { user, loading } = useMongoAuth();
 
   useEffect(() => {
     if (!loading && user) {
@@ -85,11 +85,11 @@ const Index = () => {
           <CardContent className="py-12">
             <div className="grid grid-cols-3 gap-8 text-center">
               <div>
-                <div className="text-4xl md:text-5xl font-bold text-primary mb-2">60+</div>
+                <div className="text-4xl md:text-5xl font-bold text-primary mb-2">75+</div>
                 <div className="text-sm text-muted-foreground">Practice Questions</div>
               </div>
               <div>
-                <div className="text-4xl md:text-5xl font-bold text-accent mb-2">3</div>
+                <div className="text-4xl md:text-5xl font-bold text-accent mb-2">5</div>
                 <div className="text-sm text-muted-foreground">Subjects Available</div>
               </div>
               <div>

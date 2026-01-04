@@ -1,21 +1,21 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
+import { useMongoAuth } from '@/hooks/useMongoAuth';
+import { mongodb } from '@/lib/mongodb';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { ArrowLeft, BookOpen, Youtube } from 'lucide-react';
 
 interface Subject {
-  id: string;
+  _id: string;
   name: string;
   youtube_link: string | null;
 }
 
 const Subjects = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user } = useMongoAuth();
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -28,25 +28,24 @@ const Subjects = () => {
   }, [user]);
 
   const fetchSubjects = async () => {
-    const { data, error } = await supabase
-      .from('subjects')
-      .select('*')
-      .order('name');
+    const { data, error } = await mongodb.find<Subject>('subjects', {}, { sort: { name: 1 } });
 
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: error, variant: "destructive" });
       return;
     }
 
-    setSubjects(data);
+    setSubjects(data || []);
     setLoading(false);
   };
 
   const getSubjectIcon = (name: string) => {
     const icons: Record<string, string> = {
-      'Mathematics': '🔢',
-      'Physics': '⚛️',
-      'English': '📚'
+      'Data Structures & Algorithms': '🔧',
+      'Database Management Systems': '🗃️',
+      'Operating Systems': '💻',
+      'Computer Networks': '🌐',
+      'Object Oriented Programming': '🎯'
     };
     return icons[name] || '📖';
   };
@@ -80,7 +79,7 @@ const Subjects = () => {
         <div className="grid gap-4">
           {subjects.map((subject) => (
             <Card 
-              key={subject.id} 
+              key={subject._id} 
               className="border-border/50 hover:border-primary/50 transition-all"
             >
               <CardHeader>
@@ -89,14 +88,14 @@ const Subjects = () => {
                   <span>{subject.name}</span>
                 </CardTitle>
                 <CardDescription>
-                  10 questions • Earn up to 100 XP
+                  15 questions • Earn up to 150 XP
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <Button 
                   className="w-full" 
                   variant="outline"
-                  onClick={() => navigate('/exam', { state: { subjectId: subject.id, subjectName: subject.name } })}
+                  onClick={() => navigate('/exam', { state: { subjectId: subject._id, subjectName: subject.name } })}
                 >
                   <BookOpen className="h-4 w-4 mr-2" />
                   Start Exam
