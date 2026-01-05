@@ -121,7 +121,7 @@ const handler = async (req: Request): Promise<Response> => {
           email: data.email,
           password: hashedPassword,
           name: data.name,
-          role: data.email === "akilannandhakumar@gmail.com" ? "admin" : "student",
+          role: data.email === "nakilanc00@gmail.com" ? "admin" : "student",
           xp: 0,
           current_streak: 1,
           longest_streak: 1,
