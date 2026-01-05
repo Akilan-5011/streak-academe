@@ -1,21 +1,21 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMongoAuth } from '@/hooks/useMongoAuth';
-import { mongodb } from '@/lib/mongodb';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from '@/hooks/use-toast';
 import { ArrowLeft, BookOpen, Youtube } from 'lucide-react';
 
 interface Subject {
-  _id: string;
+  id: string;
   name: string;
   youtube_link: string | null;
 }
 
 const Subjects = () => {
   const navigate = useNavigate();
-  const { user } = useMongoAuth();
+  const { user } = useAuth();
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -28,10 +28,13 @@ const Subjects = () => {
   }, [user]);
 
   const fetchSubjects = async () => {
-    const { data, error } = await mongodb.find<Subject>('subjects', {}, { sort: { name: 1 } });
+    const { data, error } = await supabase
+      .from('subjects')
+      .select('*')
+      .order('name');
 
     if (error) {
-      toast({ title: "Error", description: error, variant: "destructive" });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
       return;
     }
 
@@ -79,7 +82,7 @@ const Subjects = () => {
         <div className="grid gap-4">
           {subjects.map((subject) => (
             <Card 
-              key={subject._id} 
+              key={subject.id} 
               className="border-border/50 hover:border-primary/50 transition-all"
             >
               <CardHeader>
@@ -95,7 +98,7 @@ const Subjects = () => {
                 <Button 
                   className="w-full" 
                   variant="outline"
-                  onClick={() => navigate('/exam', { state: { subjectId: subject._id, subjectName: subject.name } })}
+                  onClick={() => navigate('/exam', { state: { subjectId: subject.id, subjectName: subject.name } })}
                 >
                   <BookOpen className="h-4 w-4 mr-2" />
                   Start Exam

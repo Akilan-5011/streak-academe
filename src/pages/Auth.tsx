@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useMongoAuth } from '@/hooks/useMongoAuth';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/hooks/use-toast';
 import { Brain, Eye, EyeOff } from 'lucide-react';
 import { z } from 'zod';
@@ -23,7 +23,7 @@ const signInSchema = z.object({
 
 const Auth = () => {
   const navigate = useNavigate();
-  const { user, signUp, signIn } = useMongoAuth();
+  const { user, signUp, signIn } = useAuth();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   
@@ -121,7 +121,6 @@ const Auth = () => {
           <h1 className="text-2xl font-bold text-foreground tracking-wider">AI DRIVEN</h1>
           <p className="gradient-text text-lg font-semibold">ADAPTIVE LEARNING</p>
           <p className="text-muted-foreground text-sm">&amp; EXAM GENERATION</p>
-          <p className="text-muted-foreground/60 text-xs mt-1">Powered by MongoDB Cloud</p>
         </div>
 
         <Card className="glass cyber-border">

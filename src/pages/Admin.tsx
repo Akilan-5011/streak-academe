@@ -7,8 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { useMongoAuth, useMongoAdmin } from '@/hooks/useMongoAuth';
-import { mongodb } from '@/lib/mongodb';
+import { useAuth } from '@/hooks/useAuth';
+import { useAdmin } from '@/hooks/useAdmin';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { 
   ArrowLeft, 
@@ -39,13 +40,13 @@ import {
 } from "@/components/ui/dialog";
 
 interface Subject {
-  _id: string;
+  id: string;
   name: string;
   youtube_link: string | null;
 }
 
 interface Question {
-  _id: string;
+  id: string;
   question: string;
   option_a: string;
   option_b: string;
@@ -58,8 +59,8 @@ interface Question {
 
 const Admin = () => {
   const navigate = useNavigate();
-  const { user, loading: authLoading } = useMongoAuth();
-  const { isAdmin, loading: adminLoading } = useMongoAdmin();
+  const { user, loading: authLoading } = useAuth();
+  const { isAdmin, loading: adminLoading } = useAdmin();
   
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -113,20 +114,29 @@ const Admin = () => {
   }, [selectedSubjectId]);
 
   const fetchSubjects = async () => {
-    const { data, error } = await mongodb.find<Subject>('subjects', {}, { sort: { name: 1 } });
+    const { data, error } = await supabase
+      .from('subjects')
+      .select('*')
+      .order('name');
+    
     if (error) {
       toast({ title: "Error", description: "Failed to fetch subjects", variant: "destructive" });
     } else {
       setSubjects(data || []);
       if (data && data.length > 0 && !selectedSubjectId) {
-        setSelectedSubjectId(data[0]._id);
+        setSelectedSubjectId(data[0].id);
       }
     }
     setLoadingData(false);
   };
 
   const fetchQuestions = async (subjectId: string) => {
-    const { data, error } = await mongodb.find<Question>('questions', { subject_id: subjectId }, { sort: { difficulty: 1 } });
+    const { data, error } = await supabase
+      .from('questions')
+      .select('*')
+      .eq('subject_id', subjectId)
+      .order('difficulty');
+    
     if (error) {
       toast({ title: "Error", description: "Failed to fetch questions", variant: "destructive" });
     } else {
@@ -142,14 +152,13 @@ const Admin = () => {
     }
     
     setAddingSubject(true);
-    const { error } = await mongodb.insertOne('subjects', {
+    const { error } = await supabase.from('subjects').insert({
       name: newSubject.name.trim(),
-      youtube_link: newSubject.youtube_link.trim() || null,
-      created_at: new Date().toISOString()
+      youtube_link: newSubject.youtube_link.trim() || null
     });
     
     if (error) {
-      toast({ title: "Error", description: error, variant: "destructive" });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "Subject added successfully" });
       setNewSubject({ name: '', youtube_link: '' });
@@ -161,15 +170,16 @@ const Admin = () => {
   const handleUpdateSubject = async () => {
     if (!editingSubject) return;
     
-    const { error } = await mongodb.updateOne('subjects', { _id: editingSubject._id }, {
-      $set: {
+    const { error } = await supabase
+      .from('subjects')
+      .update({
         name: editingSubject.name,
         youtube_link: editingSubject.youtube_link
-      }
-    });
+      })
+      .eq('id', editingSubject.id);
     
     if (error) {
-      toast({ title: "Error", description: error, variant: "destructive" });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "Subject updated successfully" });
       setEditingSubject(null);
@@ -180,12 +190,9 @@ const Admin = () => {
   const handleDeleteSubject = async (id: string) => {
     if (!confirm('Are you sure? This will delete all questions in this subject.')) return;
     
-    // Delete questions first
-    await mongodb.deleteMany('questions', { subject_id: id });
-    
-    const { error } = await mongodb.deleteOne('subjects', { _id: id });
+    const { error } = await supabase.from('subjects').delete().eq('id', id);
     if (error) {
-      toast({ title: "Error", description: error, variant: "destructive" });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "Subject deleted successfully" });
       fetchSubjects();
@@ -204,18 +211,19 @@ const Admin = () => {
     }
     
     setAddingQuestion(true);
-    const { error } = await mongodb.insertOne('questions', {
-      ...newQuestion,
+    const { error } = await supabase.from('questions').insert({
+      subject_id: newQuestion.subject_id,
       question: newQuestion.question.trim(),
       option_a: newQuestion.option_a.trim(),
       option_b: newQuestion.option_b.trim(),
       option_c: newQuestion.option_c.trim(),
       option_d: newQuestion.option_d.trim(),
-      created_at: new Date().toISOString()
+      correct_answer: newQuestion.correct_answer,
+      difficulty: newQuestion.difficulty
     });
     
     if (error) {
-      toast({ title: "Error", description: error, variant: "destructive" });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "Question added successfully" });
       setNewQuestion({
@@ -238,8 +246,9 @@ const Admin = () => {
   const handleUpdateQuestion = async () => {
     if (!editingQuestion) return;
     
-    const { error } = await mongodb.updateOne('questions', { _id: editingQuestion._id }, {
-      $set: {
+    const { error } = await supabase
+      .from('questions')
+      .update({
         question: editingQuestion.question,
         option_a: editingQuestion.option_a,
         option_b: editingQuestion.option_b,
@@ -247,11 +256,11 @@ const Admin = () => {
         option_d: editingQuestion.option_d,
         correct_answer: editingQuestion.correct_answer,
         difficulty: editingQuestion.difficulty
-      }
-    });
+      })
+      .eq('id', editingQuestion.id);
     
     if (error) {
-      toast({ title: "Error", description: error, variant: "destructive" });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "Question updated successfully" });
       setEditingQuestion(null);
@@ -264,9 +273,9 @@ const Admin = () => {
   const handleDeleteQuestion = async (id: string) => {
     if (!confirm('Are you sure you want to delete this question?')) return;
     
-    const { error } = await mongodb.deleteOne('questions', { _id: id });
+    const { error } = await supabase.from('questions').delete().eq('id', id);
     if (error) {
-      toast({ title: "Error", description: error, variant: "destructive" });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "Question deleted successfully" });
       if (selectedSubjectId) {
@@ -299,7 +308,7 @@ const Admin = () => {
             <Shield className="w-8 h-8 text-primary" />
             <div>
               <h1 className="text-2xl font-bold">Admin Panel</h1>
-              <p className="text-muted-foreground text-sm">Manage subjects, questions, and content (MongoDB)</p>
+              <p className="text-muted-foreground text-sm">Manage subjects, questions, and content</p>
             </div>
           </div>
         </div>
@@ -374,7 +383,7 @@ const Admin = () => {
                   ) : (
                     <div className="space-y-2 max-h-[400px] overflow-y-auto">
                       {subjects.map((subject) => (
-                        <div key={subject._id} className="flex items-center justify-between p-3 bg-card/50 rounded-lg">
+                        <div key={subject.id} className="flex items-center justify-between p-3 bg-card/50 rounded-lg">
                           <span className="font-medium">{subject.name}</span>
                           <div className="flex gap-2">
                             <Dialog>
@@ -410,7 +419,7 @@ const Admin = () => {
                                 </DialogFooter>
                               </DialogContent>
                             </Dialog>
-                            <Button variant="ghost" size="icon" onClick={() => handleDeleteSubject(subject._id)}>
+                            <Button variant="ghost" size="icon" onClick={() => handleDeleteSubject(subject.id)}>
                               <Trash2 className="w-4 h-4 text-destructive" />
                             </Button>
                           </div>
@@ -448,7 +457,7 @@ const Admin = () => {
                           </SelectTrigger>
                           <SelectContent>
                             {subjects.map((s) => (
-                              <SelectItem key={s._id} value={s._id}>{s.name}</SelectItem>
+                              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -474,7 +483,7 @@ const Admin = () => {
                     <div className="space-y-2">
                       <Label>Question</Label>
                       <Textarea
-                        placeholder="Enter your question..."
+                        placeholder="Enter the question"
                         value={newQuestion.question}
                         onChange={(e) => setNewQuestion({ ...newQuestion, question: e.target.value })}
                         className="bg-card/50"
@@ -549,41 +558,23 @@ const Admin = () => {
                     <CardTitle>Questions</CardTitle>
                     <Select value={selectedSubjectId} onValueChange={setSelectedSubjectId}>
                       <SelectTrigger className="w-[200px]">
-                        <SelectValue placeholder="Select subject" />
+                        <SelectValue placeholder="Filter by subject" />
                       </SelectTrigger>
                       <SelectContent>
                         {subjects.map((s) => (
-                          <SelectItem key={s._id} value={s._id}>{s.name}</SelectItem>
+                          <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Question</TableHead>
-                        <TableHead>Difficulty</TableHead>
-                        <TableHead>Answer</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {questions.map((q) => (
-                        <TableRow key={q._id}>
-                          <TableCell className="max-w-[300px] truncate">{q.question}</TableCell>
-                          <TableCell>
-                            <span className={`px-2 py-1 rounded text-xs ${
-                              q.difficulty === 'easy' ? 'bg-green-500/20 text-green-500' :
-                              q.difficulty === 'medium' ? 'bg-yellow-500/20 text-yellow-500' :
-                              'bg-red-500/20 text-red-500'
-                            }`}>
-                              {q.difficulty}
-                            </span>
-                          </TableCell>
-                          <TableCell>{q.correct_answer}</TableCell>
-                          <TableCell className="text-right">
+                  <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                    {questions.map((q, index) => (
+                      <div key={q.id} className="p-4 bg-card/50 rounded-lg">
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="font-medium">Q{index + 1}: {q.question}</span>
+                          <div className="flex gap-2">
                             <Dialog>
                               <DialogTrigger asChild>
                                 <Button variant="ghost" size="icon" onClick={() => setEditingQuestion(q)}>
@@ -603,7 +594,7 @@ const Admin = () => {
                                         onChange={(e) => setEditingQuestion({ ...editingQuestion, question: e.target.value })}
                                       />
                                     </div>
-                                    <div className="grid gap-4 md:grid-cols-2">
+                                    <div className="grid gap-4 grid-cols-2">
                                       <div className="space-y-2">
                                         <Label>Option A</Label>
                                         <Input
@@ -633,7 +624,7 @@ const Admin = () => {
                                         />
                                       </div>
                                     </div>
-                                    <div className="grid gap-4 md:grid-cols-2">
+                                    <div className="grid gap-4 grid-cols-2">
                                       <div className="space-y-2">
                                         <Label>Correct Answer</Label>
                                         <Select
@@ -675,14 +666,24 @@ const Admin = () => {
                                 </DialogFooter>
                               </DialogContent>
                             </Dialog>
-                            <Button variant="ghost" size="icon" onClick={() => handleDeleteQuestion(q._id)}>
+                            <Button variant="ghost" size="icon" onClick={() => handleDeleteQuestion(q.id)}>
                               <Trash2 className="w-4 h-4 text-destructive" />
                             </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                          </div>
+                        </div>
+                        <div className="text-sm text-muted-foreground grid grid-cols-2 gap-1">
+                          <span>A: {q.option_a}</span>
+                          <span>B: {q.option_b}</span>
+                          <span>C: {q.option_c}</span>
+                          <span>D: {q.option_d}</span>
+                        </div>
+                        <div className="flex gap-4 mt-2 text-xs">
+                          <span className="text-primary">Answer: {q.correct_answer}</span>
+                          <span className="text-muted-foreground capitalize">{q.difficulty}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -694,39 +695,53 @@ const Admin = () => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Youtube className="w-5 h-5 text-destructive" />
-                  YouTube Study Links
+                  YouTube Links for Subjects
                 </CardTitle>
-                <CardDescription>Manage YouTube tutorial links for each subject</CardDescription>
+                <CardDescription>
+                  Add YouTube tutorial links for each subject. Students can access these from the Subjects page.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   {subjects.map((subject) => (
-                    <div key={subject._id} className="flex items-center gap-4 p-4 bg-card/50 rounded-lg">
+                    <div key={subject.id} className="flex items-center gap-4 p-4 bg-card/50 rounded-lg">
                       <div className="flex-1">
                         <p className="font-medium">{subject.name}</p>
                         <p className="text-sm text-muted-foreground truncate">
                           {subject.youtube_link || 'No link added'}
                         </p>
                       </div>
+                      {subject.youtube_link && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(subject.youtube_link!, '_blank')}
+                        >
+                          <Youtube className="w-4 h-4 mr-1" />
+                          Open
+                        </Button>
+                      )}
                       <Dialog>
                         <DialogTrigger asChild>
-                          <Button variant="outline" onClick={() => setEditingSubject(subject)}>
-                            <Edit className="w-4 h-4 mr-2" />
-                            Edit Link
+                          <Button variant="ghost" size="icon" onClick={() => setEditingSubject(subject)}>
+                            <Edit className="w-4 h-4" />
                           </Button>
                         </DialogTrigger>
                         <DialogContent>
                           <DialogHeader>
-                            <DialogTitle>Edit YouTube Link - {subject.name}</DialogTitle>
+                            <DialogTitle>Edit YouTube Link</DialogTitle>
                           </DialogHeader>
-                          {editingSubject && editingSubject._id === subject._id && (
+                          {editingSubject && (
                             <div className="space-y-4">
+                              <div className="space-y-2">
+                                <Label>Subject: {editingSubject.name}</Label>
+                              </div>
                               <div className="space-y-2">
                                 <Label>YouTube Link</Label>
                                 <Input
+                                  placeholder="https://www.youtube.com/watch?v=..."
                                   value={editingSubject.youtube_link || ''}
                                   onChange={(e) => setEditingSubject({ ...editingSubject, youtube_link: e.target.value })}
-                                  placeholder="https://youtube.com/..."
                                 />
                               </div>
                             </div>

@@ -1,18 +1,20 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMongoAuth, useMongoAdmin } from '@/hooks/useMongoAuth';
-import { mongodb } from '@/lib/mongodb';
+import { useAuth } from '@/hooks/useAuth';
+import { useAdmin } from '@/hooks/useAdmin';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { toast } from '@/hooks/use-toast';
-import { Flame, Star, Calendar, BookOpen, User, LogOut, Trophy, Award, ScrollText, BarChart3, Target, Shield } from 'lucide-react';
+import { Flame, Star, Calendar, BookOpen, User, LogOut, Trophy, Award, ScrollText, BarChart3, Target, Shield, FileText } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { user, signOut, loading, refreshUser } = useMongoAuth();
-  const { isAdmin } = useMongoAdmin();
+  const { user, signOut, loading } = useAuth();
+  const { isAdmin } = useAdmin();
+  const [profile, setProfile] = useState<any>(null);
   const [canTakeQuiz, setCanTakeQuiz] = useState(true);
   const [nextQuizTime, setNextQuizTime] = useState<string>('');
   const [badgeCount, setBadgeCount] = useState(0);
@@ -26,23 +28,42 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (user) {
+      fetchProfile();
       fetchBadgeCount();
       fetchCertCount();
-      checkQuizAvailability(user.last_quiz_date);
-      checkStreakAndUpdate();
     }
   }, [user]);
 
+  const fetchProfile = async () => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user!.id)
+      .single();
+    
+    if (data) {
+      setProfile(data);
+      checkQuizAvailability(data.last_quiz_date);
+      checkStreakAndUpdate(data);
+    }
+  };
+
   const fetchBadgeCount = async () => {
     if (!user) return;
-    const { data } = await mongodb.find('badges', { user_id: user.id });
-    setBadgeCount(data?.length || 0);
+    const { count } = await supabase
+      .from('badges')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id);
+    setBadgeCount(count || 0);
   };
 
   const fetchCertCount = async () => {
     if (!user) return;
-    const { data } = await mongodb.find('certificates', { user_id: user.id });
-    setCertCount(data?.length || 0);
+    const { count } = await supabase
+      .from('certificates')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id);
+    setCertCount(count || 0);
   };
 
   const checkQuizAvailability = (lastQuizDate: string | null) => {
@@ -87,7 +108,7 @@ const Dashboard = () => {
     return () => clearInterval(timer);
   };
 
-  const checkStreakAndUpdate = async () => {
+  const checkStreakAndUpdate = async (profileData: any) => {
     if (!user) return;
 
     const streakCheckedKey = `streak_checked_${user.id}`;
@@ -95,7 +116,7 @@ const Dashboard = () => {
       return;
     }
 
-    const lastLoginStr = user.last_login_date;
+    const lastLoginStr = profileData.last_login_date;
     const todayStr = new Date().toISOString().split('T')[0];
     
     if (lastLoginStr === todayStr) {
@@ -108,36 +129,38 @@ const Dashboard = () => {
     const daysDiff = Math.floor((today.getTime() - lastLogin.getTime()) / (1000 * 60 * 60 * 24));
 
     if (daysDiff === 1) {
-      const newStreak = user.current_streak + 1;
-      const newLongest = Math.max(newStreak, user.longest_streak);
+      const newStreak = profileData.current_streak + 1;
+      const newLongest = Math.max(newStreak, profileData.longest_streak);
       
-      await mongodb.updateOne('users', { _id: user.id }, {
-        $set: {
+      await supabase
+        .from('profiles')
+        .update({
           current_streak: newStreak,
           longest_streak: newLongest,
           last_login_date: todayStr
-        }
-      });
+        })
+        .eq('id', user.id);
       
       toast({ 
         title: "🔥 Streak continued!", 
         description: `You're on a ${newStreak}-day streak!` 
       });
-      refreshUser();
+      fetchProfile();
     } else if (daysDiff > 1) {
-      await mongodb.updateOne('users', { _id: user.id }, {
-        $set: {
+      await supabase
+        .from('profiles')
+        .update({
           current_streak: 1,
           last_login_date: todayStr
-        }
-      });
+        })
+        .eq('id', user.id);
       
       toast({ 
         title: "Streak reset", 
         description: "Start a new streak today!",
         variant: "destructive"
       });
-      refreshUser();
+      fetchProfile();
     }
 
     sessionStorage.setItem(streakCheckedKey, 'true');
@@ -149,7 +172,7 @@ const Dashboard = () => {
     return { name: 'Advanced', color: 'text-primary' };
   };
 
-  if (loading || !user) {
+  if (loading || !user || !profile) {
     return (
       <div className="min-h-screen flex items-center justify-center gradient-dark">
         <div className="text-center">
@@ -160,7 +183,7 @@ const Dashboard = () => {
     );
   }
 
-  const level = getLevel(user.xp);
+  const level = getLevel(profile.xp);
 
   return (
     <div className="min-h-screen gradient-dark p-4 pb-20">
@@ -169,7 +192,7 @@ const Dashboard = () => {
         <div className="flex justify-between items-start">
           <div>
             <h1 className="text-3xl font-bold mb-1">Welcome back,</h1>
-            <p className="text-2xl font-bold text-primary">{user.name}!</p>
+            <p className="text-2xl font-bold text-primary">{profile.name}!</p>
           </div>
           <div className="flex gap-2">
             <ThemeToggle />
@@ -188,16 +211,16 @@ const Dashboard = () => {
                 Daily XP Goal
               </span>
               <span className="text-lg">
-                {user.daily_xp}/{user.daily_xp_goal}
+                {profile.daily_xp || 0}/{profile.daily_xp_goal || 50}
               </span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <Progress value={(user.daily_xp / user.daily_xp_goal) * 100} className="h-2" />
+            <Progress value={((profile.daily_xp || 0) / (profile.daily_xp_goal || 50)) * 100} className="h-2" />
             <p className="text-xs text-muted-foreground mt-2">
-              {user.daily_xp >= user.daily_xp_goal 
+              {(profile.daily_xp || 0) >= (profile.daily_xp_goal || 50)
                 ? "🎉 Goal completed! Great work!" 
-                : `${user.daily_xp_goal - user.daily_xp} XP to go!`}
+                : `${(profile.daily_xp_goal || 50) - (profile.daily_xp || 0)} XP to go!`}
             </p>
           </CardContent>
         </Card>
@@ -212,8 +235,8 @@ const Dashboard = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{user.current_streak}</div>
-              <p className="text-xs text-muted-foreground">Best: {user.longest_streak} days</p>
+              <div className="text-3xl font-bold">{profile.current_streak}</div>
+              <p className="text-xs text-muted-foreground">Best: {profile.longest_streak} days</p>
             </CardContent>
           </Card>
 
@@ -225,7 +248,7 @@ const Dashboard = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{user.xp}</div>
+              <div className="text-3xl font-bold">{profile.xp}</div>
               <p className={`text-xs font-semibold ${level.color}`}>{level.name}</p>
             </CardContent>
           </Card>
@@ -314,6 +337,18 @@ const Dashboard = () => {
             <Button 
               variant="outline" 
               className="h-20"
+              onClick={() => navigate('/assignments')}
+            >
+              <div className="text-center">
+                <FileText className="h-6 w-6 mx-auto mb-1" />
+                <div className="font-semibold text-sm">Assignments</div>
+                <div className="text-xs text-muted-foreground">View & submit</div>
+              </div>
+            </Button>
+
+            <Button 
+              variant="outline" 
+              className="h-20"
               onClick={() => navigate('/progress')}
             >
               <div className="text-center">
@@ -322,7 +357,9 @@ const Dashboard = () => {
                 <div className="text-xs text-muted-foreground">Your progress</div>
               </div>
             </Button>
+          </div>
 
+          <div className="grid grid-cols-2 gap-4">
             <Button 
               variant="outline" 
               className="h-20"
@@ -334,9 +371,7 @@ const Dashboard = () => {
                 <div className="text-xs text-muted-foreground">Focus areas</div>
               </div>
             </Button>
-          </div>
 
-          <div className="grid grid-cols-2 gap-4">
             <Button 
               variant="outline" 
               className="h-20"
@@ -348,21 +383,21 @@ const Dashboard = () => {
                 <div className="text-xs text-muted-foreground">Edit info</div>
               </div>
             </Button>
-
-            {isAdmin && (
-              <Button 
-                variant="outline" 
-                className="h-20 border-primary/50 bg-primary/5"
-                onClick={() => navigate('/admin')}
-              >
-                <div className="text-center">
-                  <Shield className="h-6 w-6 mx-auto mb-1 text-primary" />
-                  <div className="font-semibold text-sm text-primary">Admin Panel</div>
-                  <div className="text-xs text-muted-foreground">Manage content</div>
-                </div>
-              </Button>
-            )}
           </div>
+
+          {isAdmin && (
+            <Button 
+              variant="outline" 
+              className="h-20 border-primary/50 bg-primary/5"
+              onClick={() => navigate('/admin')}
+            >
+              <div className="text-center">
+                <Shield className="h-6 w-6 mx-auto mb-1 text-primary" />
+                <div className="font-semibold text-sm text-primary">Admin Panel</div>
+                <div className="text-xs text-muted-foreground">Manage content</div>
+              </div>
+            </Button>
+          )}
         </div>
       </div>
     </div>
