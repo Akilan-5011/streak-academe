@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/hooks/use-toast';
-import { Brain, Eye, EyeOff } from 'lucide-react';
+import { Brain, Eye, EyeOff, Shield, GraduationCap } from 'lucide-react';
 import { z } from 'zod';
+import { supabase } from '@/integrations/supabase/client';
 
 const signUpSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -26,8 +27,9 @@ const Auth = () => {
   const { user, signUp, signIn } = useAuth();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [signUpType, setSignUpType] = useState<'student' | 'admin'>('student');
   
-  const [signUpData, setSignUpData] = useState({ name: '', email: '', password: '', confirmPassword: '' });
+  const [signUpData, setSignUpData] = useState({ name: '', email: '', password: '', confirmPassword: '', adminCode: '' });
   const [signInData, setSignInData] = useState({ email: '', password: '' });
 
   useEffect(() => {
@@ -36,7 +38,7 @@ const Auth = () => {
     }
   }, [user, navigate]);
 
-  const handleSignUp = async (e: React.FormEvent) => {
+  const handleStudentSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
@@ -61,8 +63,55 @@ const Auth = () => {
           toast({ title: "Error", description: error, variant: "destructive" });
         }
       } else {
-        toast({ title: "Success!", description: "Account created successfully" });
+        toast({ title: "Success!", description: "Student account created successfully" });
         navigate('/dashboard');
+      }
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        toast({ title: "Validation Error", description: err.errors[0].message, variant: "destructive" });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAdminSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    if (signUpData.password !== signUpData.confirmPassword) {
+      toast({ title: "Error", description: "Passwords do not match", variant: "destructive" });
+      setLoading(false);
+      return;
+    }
+
+    if (!signUpData.adminCode.trim()) {
+      toast({ title: "Error", description: "Admin code is required", variant: "destructive" });
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const validated = signUpSchema.parse(signUpData);
+      
+      // Call edge function for admin registration
+      const { data, error } = await supabase.functions.invoke('register-admin', {
+        body: {
+          email: validated.email,
+          password: validated.password,
+          name: validated.name,
+          adminCode: signUpData.adminCode
+        }
+      });
+
+      if (error) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+      } else if (data?.error) {
+        toast({ title: "Error", description: data.error, variant: "destructive" });
+      } else {
+        toast({ title: "Success!", description: "Admin account created successfully. Please sign in." });
+        setSignInData({ email: validated.email, password: '' });
+        setSignUpData({ name: '', email: '', password: '', confirmPassword: '', adminCode: '' });
       }
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -180,7 +229,29 @@ const Auth = () => {
               </TabsContent>
 
               <TabsContent value="signup">
-                <form onSubmit={handleSignUp} className="space-y-4">
+                {/* Sign Up Type Selection */}
+                <div className="flex gap-2 mb-6">
+                  <Button
+                    type="button"
+                    variant={signUpType === 'student' ? 'default' : 'outline'}
+                    className={`flex-1 gap-2 ${signUpType === 'student' ? 'bg-gradient-to-r from-primary to-accent' : ''}`}
+                    onClick={() => setSignUpType('student')}
+                  >
+                    <GraduationCap className="h-4 w-4" />
+                    Student
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={signUpType === 'admin' ? 'default' : 'outline'}
+                    className={`flex-1 gap-2 ${signUpType === 'admin' ? 'bg-gradient-to-r from-primary to-accent' : ''}`}
+                    onClick={() => setSignUpType('admin')}
+                  >
+                    <Shield className="h-4 w-4" />
+                    Admin
+                  </Button>
+                </div>
+
+                <form onSubmit={signUpType === 'student' ? handleStudentSignUp : handleAdminSignUp} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="signup-name" className="text-muted-foreground">Full Name</Label>
                     <Input
@@ -229,8 +300,28 @@ const Auth = () => {
                       required
                     />
                   </div>
+                  
+                  {signUpType === 'admin' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="admin-code" className="text-muted-foreground flex items-center gap-2">
+                        <Shield className="h-4 w-4 text-primary" />
+                        Admin Secret Code
+                      </Label>
+                      <Input
+                        id="admin-code"
+                        type="password"
+                        placeholder="Enter admin code"
+                        value={signUpData.adminCode}
+                        onChange={(e) => setSignUpData({ ...signUpData, adminCode: e.target.value })}
+                        className="bg-card/50 border-border/50 focus:border-primary"
+                        required
+                      />
+                      <p className="text-xs text-muted-foreground">Contact your administrator to get the secret code.</p>
+                    </div>
+                  )}
+                  
                   <Button type="submit" className="w-full glow-button bg-gradient-to-r from-primary to-accent hover:opacity-90" disabled={loading}>
-                    {loading ? 'Creating account...' : 'Sign Up'}
+                    {loading ? 'Creating account...' : `Sign Up as ${signUpType === 'student' ? 'Student' : 'Admin'}`}
                   </Button>
                 </form>
               </TabsContent>
