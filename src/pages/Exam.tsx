@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useMongoAuth } from '@/hooks/useMongoAuth';
-import { mongodb } from '@/lib/mongodb';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -11,20 +11,20 @@ import { toast } from '@/hooks/use-toast';
 import { ArrowLeft, Clock, Trophy, Settings } from 'lucide-react';
 
 interface Question {
-  _id: string;
+  id: string;
   question: string;
   option_a: string;
   option_b: string;
   option_c: string;
   option_d: string;
-  correct_answer: string;
   subject_id: string;
+  difficulty: string;
 }
 
 const Exam = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, refreshUser } = useMongoAuth();
+  const { user } = useAuth();
   const { subjectId, subjectName } = location.state || {};
   
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -65,13 +65,16 @@ const Exam = () => {
 
   const startExam = async () => {
     setLoading(true);
-    const { data, error } = await mongodb.find<Question>('questions', {
-      subject_id: subjectId,
-      difficulty: difficulty
-    });
+    
+    // Use the secure view to get questions without correct_answer
+    const { data, error } = await supabase
+      .from('questions_for_quiz')
+      .select('*')
+      .eq('subject_id', subjectId)
+      .eq('difficulty', difficulty);
 
     if (error) {
-      toast({ title: "Error", description: error, variant: "destructive" });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
       navigate('/subjects');
       return;
     }
@@ -100,9 +103,15 @@ const Exam = () => {
     if (submitting) return;
     setSubmitting(true);
 
-    const score = questions.reduce((acc, question, index) => {
-      return acc + (answers[index] === question.correct_answer ? 1 : 0);
-    }, 0);
+    // Validate answers server-side using secure RPC function
+    let score = 0;
+    for (let i = 0; i < questions.length; i++) {
+      const { data: isCorrect } = await supabase.rpc('validate_quiz_answer', {
+        p_question_id: questions[i].id,
+        p_user_answer: answers[i] || ''
+      });
+      if (isCorrect) score++;
+    }
 
     const percentage = (score / questions.length) * 100;
     const xpEarned = score * 10;
@@ -110,23 +119,29 @@ const Exam = () => {
     const timeTaken = totalTime - timeLeft;
 
     // Update user XP
-    await mongodb.updateOne('users', { _id: user!.id }, {
-      $inc: { xp: xpEarned }
-    });
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('xp')
+      .eq('id', user!.id)
+      .single();
+
+    if (profile) {
+      await supabase
+        .from('profiles')
+        .update({ xp: profile.xp + xpEarned })
+        .eq('id', user!.id);
+    }
 
     // Save attempt
-    await mongodb.insertOne('attempts', {
+    await supabase.from('attempts').insert({
       user_id: user!.id,
       score,
       total_questions: questions.length,
       percentage,
       type: 'exam',
       subject_id: subjectId,
-      time_taken: timeTaken,
-      created_at: new Date().toISOString()
+      time_taken: timeTaken
     });
-
-    refreshUser();
 
     navigate('/results', { 
       state: { 

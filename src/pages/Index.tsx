@@ -1,13 +1,13 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMongoAuth } from '@/hooks/useMongoAuth';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Brain, Sparkles, Trophy, Zap, Target } from 'lucide-react';
 
 const Index = () => {
   const navigate = useNavigate();
-  const { user, loading } = useMongoAuth();
+  const { user, loading } = useAuth();
 
   useEffect(() => {
     if (!loading && user) {

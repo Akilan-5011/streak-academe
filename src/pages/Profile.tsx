@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMongoAuth } from '@/hooks/useMongoAuth';
-import { mongodb } from '@/lib/mongodb';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,26 +11,57 @@ import { ArrowLeft, User, Mail, Star, Trophy, Flame, Calendar } from 'lucide-rea
 
 const Profile = () => {
   const navigate = useNavigate();
-  const { user, refreshUser } = useMongoAuth();
+  const { user } = useAuth();
+  const [profile, setProfile] = useState<any>(null);
   const [name, setName] = useState('');
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [totalQuizzes, setTotalQuizzes] = useState(0);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     if (!user) {
       navigate('/auth');
       return;
     }
-    setName(user.name);
+    fetchProfile();
     fetchQuizCount();
-    setLoading(false);
+    checkAdmin();
   }, [user]);
+
+  const fetchProfile = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+    
+    if (data) {
+      setProfile(data);
+      setName(data.name);
+    }
+    setLoading(false);
+  };
 
   const fetchQuizCount = async () => {
     if (!user) return;
-    const { data } = await mongodb.count('attempts', { user_id: user.id });
-    setTotalQuizzes(typeof data === 'number' ? data : 0);
+    const { count } = await supabase
+      .from('attempts')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id);
+    setTotalQuizzes(count || 0);
+  };
+
+  const checkAdmin = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('role', 'admin')
+      .maybeSingle();
+    setIsAdmin(!!data);
   };
 
   const handleUpdateName = async () => {
@@ -39,18 +70,19 @@ const Profile = () => {
       return;
     }
 
-    const { error } = await mongodb.updateOne('users', { _id: user!.id }, {
-      $set: { name: name.trim() }
-    });
+    const { error } = await supabase
+      .from('profiles')
+      .update({ name: name.trim() })
+      .eq('id', user!.id);
 
     if (error) {
-      toast({ title: "Error", description: error, variant: "destructive" });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
       return;
     }
 
     toast({ title: "Success!", description: "Profile updated successfully" });
     setEditing(false);
-    refreshUser();
+    fetchProfile();
   };
 
   const getLevel = (xp: number) => {
@@ -59,7 +91,7 @@ const Profile = () => {
     return { name: 'Advanced', color: 'text-primary', icon: '🚀' };
   };
 
-  if (loading || !user) {
+  if (loading || !profile) {
     return (
       <div className="min-h-screen flex items-center justify-center gradient-dark">
         <div className="text-center">
@@ -70,7 +102,7 @@ const Profile = () => {
     );
   }
 
-  const level = getLevel(user.xp);
+  const level = getLevel(profile.xp);
 
   return (
     <div className="min-h-screen gradient-dark p-4">
@@ -106,7 +138,7 @@ const Profile = () => {
                   <Button onClick={handleUpdateName}>Save</Button>
                   <Button variant="outline" onClick={() => {
                     setEditing(false);
-                    setName(user.name);
+                    setName(profile.name);
                   }}>
                     Cancel
                   </Button>
@@ -115,7 +147,7 @@ const Profile = () => {
                 <div className="flex items-center gap-2">
                   <div className="flex-1 p-2 rounded-lg bg-muted/50 flex items-center gap-2">
                     <User className="h-4 w-4 text-muted-foreground" />
-                    <span>{user.name}</span>
+                    <span>{profile.name}</span>
                   </div>
                   <Button variant="outline" onClick={() => setEditing(true)}>
                     Edit
@@ -128,7 +160,7 @@ const Profile = () => {
               <Label htmlFor="email">Email</Label>
               <div className="p-2 rounded-lg bg-muted/50 flex items-center gap-2">
                 <Mail className="h-4 w-4 text-muted-foreground" />
-                <span>{user.email}</span>
+                <span>{profile.email}</span>
               </div>
             </div>
           </CardContent>
@@ -147,7 +179,7 @@ const Profile = () => {
                   <Star className="h-5 w-5" />
                   <span className="font-semibold">Total XP</span>
                 </div>
-                <div className="text-3xl font-bold">{user.xp}</div>
+                <div className="text-3xl font-bold">{profile.xp}</div>
                 <div className={`text-sm font-semibold ${level.color} flex items-center gap-1 mt-1`}>
                   <span>{level.icon}</span>
                   <span>{level.name}</span>
@@ -159,9 +191,9 @@ const Profile = () => {
                   <Flame className="h-5 w-5" />
                   <span className="font-semibold">Streak</span>
                 </div>
-                <div className="text-3xl font-bold">{user.current_streak}</div>
+                <div className="text-3xl font-bold">{profile.current_streak}</div>
                 <div className="text-sm text-muted-foreground mt-1">
-                  Best: {user.longest_streak} days
+                  Best: {profile.longest_streak} days
                 </div>
               </div>
 
@@ -182,7 +214,7 @@ const Profile = () => {
                   <span className="font-semibold">Role</span>
                 </div>
                 <div className="text-sm font-bold capitalize">
-                  {user.role}
+                  {isAdmin ? 'Admin' : 'Student'}
                 </div>
                 <div className="text-sm text-muted-foreground mt-1">
                   Account type
