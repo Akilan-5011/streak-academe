@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMongoAuth } from '@/hooks/useMongoAuth';
-import { mongodb } from '@/lib/mongodb';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -11,19 +11,19 @@ import { toast } from '@/hooks/use-toast';
 import { ArrowLeft, Clock, Trophy, Settings, Bookmark } from 'lucide-react';
 
 interface Question {
-  _id: string;
+  id: string;
   question: string;
   option_a: string;
   option_b: string;
   option_c: string;
   option_d: string;
-  correct_answer: string;
   subject_id: string;
+  difficulty: string;
 }
 
 const DailyQuiz = () => {
   const navigate = useNavigate();
-  const { user, refreshUser } = useMongoAuth();
+  const { user } = useAuth();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
@@ -63,10 +63,15 @@ const DailyQuiz = () => {
 
   const startQuiz = async () => {
     setLoading(true);
-    const { data, error } = await mongodb.find<Question>('questions', { difficulty });
+    
+    // Use the secure RPC function to get questions without exposing correct_answer
+    const { data, error } = await supabase.rpc('get_quiz_questions', {
+      p_difficulty: difficulty,
+      p_limit: parseInt(questionCount)
+    });
 
     if (error) {
-      toast({ title: "Error", description: error, variant: "destructive" });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
       navigate('/dashboard');
       return;
     }
@@ -82,10 +87,7 @@ const DailyQuiz = () => {
       return;
     }
 
-    // Randomly select questions based on user choice
-    const shuffled = data.sort(() => 0.5 - Math.random());
-    const selected = shuffled.slice(0, parseInt(questionCount));
-    setQuestions(selected);
+    setQuestions(data);
     setTimeLeft(parseInt(timeLimit) * 60);
     setShowConfig(false);
     setLoading(false);
@@ -95,9 +97,15 @@ const DailyQuiz = () => {
     if (submitting) return;
     setSubmitting(true);
 
-    const score = questions.reduce((acc, question, index) => {
-      return acc + (answers[index] === question.correct_answer ? 1 : 0);
-    }, 0);
+    // Validate answers server-side using secure RPC function
+    let score = 0;
+    for (let i = 0; i < questions.length; i++) {
+      const { data: isCorrect } = await supabase.rpc('validate_quiz_answer', {
+        p_question_id: questions[i].id,
+        p_user_answer: answers[i] || ''
+      });
+      if (isCorrect) score++;
+    }
 
     const percentage = (score / questions.length) * 100;
     const xpEarned = score * 10;
@@ -105,24 +113,33 @@ const DailyQuiz = () => {
     const timeTaken = totalTime - timeLeft;
 
     // Update user XP and daily XP
-    await mongodb.updateOne('users', { _id: user!.id }, {
-      $inc: { xp: xpEarned, daily_xp: xpEarned },
-      $set: { last_quiz_date: new Date().toISOString() }
-    });
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('xp, daily_xp')
+      .eq('id', user!.id)
+      .single();
+
+    if (profile) {
+      await supabase
+        .from('profiles')
+        .update({ 
+          xp: profile.xp + xpEarned,
+          daily_xp: (profile.daily_xp || 0) + xpEarned,
+          last_quiz_date: new Date().toISOString().split('T')[0]
+        })
+        .eq('id', user!.id);
+    }
 
     // Save attempt
-    await mongodb.insertOne('attempts', {
+    await supabase.from('attempts').insert({
       user_id: user!.id,
       score,
       total_questions: questions.length,
       percentage,
       type: 'daily_quiz',
       subject_id: questions[0].subject_id,
-      time_taken: timeTaken,
-      created_at: new Date().toISOString()
+      time_taken: timeTaken
     });
-
-    refreshUser();
 
     navigate('/results', { 
       state: { 
@@ -145,11 +162,22 @@ const DailyQuiz = () => {
   const toggleBookmark = async (questionId: string) => {
     const isBookmarked = bookmarkedQuestions.has(questionId);
     if (isBookmarked) {
-      await mongodb.deleteOne('bookmarks', { user_id: user!.id, question_id: questionId });
-      setBookmarkedQuestions(prev => { const newSet = new Set(prev); newSet.delete(questionId); return newSet; });
+      await supabase
+        .from('bookmarks')
+        .delete()
+        .eq('user_id', user!.id)
+        .eq('question_id', questionId);
+      setBookmarkedQuestions(prev => { 
+        const newSet = new Set(prev); 
+        newSet.delete(questionId); 
+        return newSet; 
+      });
       toast({ title: "Bookmark removed" });
     } else {
-      await mongodb.insertOne('bookmarks', { user_id: user!.id, question_id: questionId, created_at: new Date().toISOString() });
+      await supabase.from('bookmarks').insert({
+        user_id: user!.id,
+        question_id: questionId
+      });
       setBookmarkedQuestions(prev => new Set([...prev, questionId]));
       toast({ title: "Question bookmarked" });
     }
@@ -313,11 +341,11 @@ const DailyQuiz = () => {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => toggleBookmark(currentQuestion._id)}
+                onClick={() => toggleBookmark(currentQuestion.id)}
               >
                 <Bookmark
                   className={`h-5 w-5 ${
-                    bookmarkedQuestions.has(currentQuestion._id)
+                    bookmarkedQuestions.has(currentQuestion.id)
                       ? "fill-primary text-primary"
                       : "text-muted-foreground"
                   }`}
