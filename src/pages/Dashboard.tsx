@@ -8,7 +8,7 @@ import { Progress } from '@/components/ui/progress';
 import { toast } from '@/hooks/use-toast';
 import { Flame, Star, Calendar, BookOpen, User, LogOut, Trophy, Award, ScrollText, BarChart3, Target, Shield, FileText } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import AIRecommendations from '@/components/AIRecommendations';
+import AIStudyChat from '@/components/AIStudyChat';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -253,8 +253,8 @@ const Dashboard = () => {
           </Card>
         </div>
 
-        {/* AI Recommendations */}
-        <AIRecommendations />
+        {/* AI Study Chat */}
+        <AIStudyChat />
 
         {/* Daily Quiz Card */}
         <Card className="border-primary/30 bg-gradient-to-br from-card to-primary/5">
