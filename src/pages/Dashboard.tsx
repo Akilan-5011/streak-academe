@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { useAdmin } from '@/hooks/useAdmin';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,11 +8,11 @@ import { Progress } from '@/components/ui/progress';
 import { toast } from '@/hooks/use-toast';
 import { Flame, Star, Calendar, BookOpen, User, LogOut, Trophy, Award, ScrollText, BarChart3, Target, Shield, FileText } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import AIRecommendations from '@/components/AIRecommendations';
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user, signOut, loading } = useAuth();
-  const { isAdmin } = useAdmin();
   const [profile, setProfile] = useState<any>(null);
   const [canTakeQuiz, setCanTakeQuiz] = useState(true);
   const [nextQuizTime, setNextQuizTime] = useState<string>('');
@@ -254,6 +253,9 @@ const Dashboard = () => {
           </Card>
         </div>
 
+        {/* AI Recommendations */}
+        <AIRecommendations />
+
         {/* Daily Quiz Card */}
         <Card className="border-primary/30 bg-gradient-to-br from-card to-primary/5">
           <CardHeader>
@@ -385,19 +387,17 @@ const Dashboard = () => {
             </Button>
           </div>
 
-          {isAdmin && (
-            <Button 
-              variant="outline" 
-              className="h-20 border-primary/50 bg-primary/5"
-              onClick={() => navigate('/admin')}
-            >
-              <div className="text-center">
-                <Shield className="h-6 w-6 mx-auto mb-1 text-primary" />
-                <div className="font-semibold text-sm text-primary">Admin Panel</div>
-                <div className="text-xs text-muted-foreground">Manage content</div>
-              </div>
-            </Button>
-          )}
+          <Button 
+            variant="outline" 
+            className="h-20 border-primary/50 bg-primary/5"
+            onClick={() => navigate('/admin')}
+          >
+            <div className="text-center">
+              <Shield className="h-6 w-6 mx-auto mb-1 text-primary" />
+              <div className="font-semibold text-sm text-primary">Admin Panel</div>
+              <div className="text-xs text-muted-foreground">Manage content</div>
+            </div>
+          </Button>
         </div>
       </div>
     </div>
