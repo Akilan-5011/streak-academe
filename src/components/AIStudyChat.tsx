@@ -16,6 +16,18 @@ interface SubjectPerformance {
   subject_name: string;
   avg_percentage: number;
   total_attempts: number;
+  easy_success: number;
+  medium_success: number;
+  hard_success: number;
+  recent_trend: 'improving' | 'declining' | 'stable';
+  time_spent_avg: number;
+}
+
+interface LearningProfile {
+  total_xp: number;
+  current_streak: number;
+  daily_xp: number;
+  recommended_difficulty: 'easy' | 'medium' | 'hard';
 }
 
 const AIStudyChat = () => {
@@ -24,11 +36,13 @@ const AIStudyChat = () => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [performances, setPerformances] = useState<SubjectPerformance[]>([]);
+  const [learningProfile, setLearningProfile] = useState<LearningProfile | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (user) {
       fetchPerformanceData();
+      fetchLearningProfile();
     }
   }, [user]);
 
@@ -39,6 +53,32 @@ const AIStudyChat = () => {
     }
   }, [messages]);
 
+  const fetchLearningProfile = async () => {
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('xp, current_streak, daily_xp')
+        .eq('id', user?.id)
+        .single();
+
+      if (profile) {
+        // Determine recommended difficulty based on XP and streak
+        let recommended: 'easy' | 'medium' | 'hard' = 'medium';
+        if (profile.xp < 50) recommended = 'easy';
+        else if (profile.xp > 300 && profile.current_streak >= 7) recommended = 'hard';
+
+        setLearningProfile({
+          total_xp: profile.xp,
+          current_streak: profile.current_streak,
+          daily_xp: profile.daily_xp || 0,
+          recommended_difficulty: recommended
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching learning profile:', error);
+    }
+  };
+
   const fetchPerformanceData = async () => {
     try {
       const { data: subjects } = await supabase
@@ -47,20 +87,42 @@ const AIStudyChat = () => {
 
       const { data: attempts } = await supabase
         .from('attempts')
-        .select('subject_id, percentage')
-        .eq('user_id', user?.id);
+        .select('subject_id, percentage, time_taken, created_at')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false });
+
+      const { data: attemptDetails } = await supabase
+        .from('attempt_details')
+        .select(`
+          is_correct,
+          attempt_id,
+          attempts!inner(subject_id, user_id)
+        `)
+        .eq('attempts.user_id', user?.id);
 
       if (subjects && attempts) {
-        const performanceMap = new Map<string, { percentages: number[]; name: string }>();
+        const performanceMap = new Map<string, { 
+          percentages: number[]; 
+          name: string; 
+          times: number[];
+          recentAttempts: number[];
+        }>();
 
         subjects.forEach(subject => {
-          performanceMap.set(subject.id, { percentages: [], name: subject.name });
+          performanceMap.set(subject.id, { 
+            percentages: [], 
+            name: subject.name, 
+            times: [],
+            recentAttempts: []
+          });
         });
 
-        attempts.forEach(attempt => {
+        attempts.forEach((attempt, idx) => {
           const existing = performanceMap.get(attempt.subject_id);
           if (existing) {
             existing.percentages.push(attempt.percentage);
+            existing.times.push(attempt.time_taken);
+            if (idx < 5) existing.recentAttempts.push(attempt.percentage);
           }
         });
 
@@ -69,10 +131,30 @@ const AIStudyChat = () => {
           const avgPercentage = data.percentages.length > 0
             ? data.percentages.reduce((a, b) => a + b, 0) / data.percentages.length
             : 0;
+          const avgTime = data.times.length > 0
+            ? data.times.reduce((a, b) => a + b, 0) / data.times.length
+            : 0;
+          
+          // Calculate trend from recent attempts
+          let trend: 'improving' | 'declining' | 'stable' = 'stable';
+          if (data.recentAttempts.length >= 3) {
+            const recent = data.recentAttempts.slice(0, 3);
+            const older = data.recentAttempts.slice(-3);
+            const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
+            const olderAvg = older.reduce((a, b) => a + b, 0) / older.length;
+            if (recentAvg > olderAvg + 5) trend = 'improving';
+            else if (recentAvg < olderAvg - 5) trend = 'declining';
+          }
+
           perf.push({
             subject_name: data.name,
             avg_percentage: Math.round(avgPercentage),
-            total_attempts: data.percentages.length
+            total_attempts: data.percentages.length,
+            easy_success: 0, // Will be calculated if we have difficulty data
+            medium_success: 0,
+            hard_success: 0,
+            recent_trend: trend,
+            time_spent_avg: Math.round(avgTime)
           });
         });
 
@@ -101,6 +183,7 @@ const AIStudyChat = () => {
         body: { 
           messages: [...messages, newUserMessage],
           performances,
+          learningProfile,
           isFirstMessage
         }
       });
@@ -135,38 +218,50 @@ const AIStudyChat = () => {
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-lg">
           <Brain className="h-5 w-5 text-primary" />
-          AI Study Assistant
+          AI Adaptive Learning
           <Sparkles className="h-4 w-4 text-accent" />
         </CardTitle>
+        {learningProfile && (
+          <p className="text-xs text-muted-foreground">
+            Recommended difficulty: <span className="font-semibold text-primary capitalize">{learningProfile.recommended_difficulty}</span>
+          </p>
+        )}
       </CardHeader>
       <CardContent className="space-y-4">
         {messages.length === 0 ? (
           <div className="text-center py-6">
             <Bot className="h-12 w-12 text-primary mx-auto mb-3 opacity-70" />
             <p className="text-sm text-muted-foreground mb-4">
-              Hi! I'm your AI study assistant. Ask me anything about your learning journey!
+              Hi! I'm your AI adaptive learning assistant. I'll personalize recommendations based on your performance!
             </p>
             <div className="flex flex-wrap gap-2 justify-center">
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={() => sendMessage('What subjects should I focus on?')}
+                onClick={() => sendMessage('What subjects should I focus on based on my performance?')}
               >
                 📚 Focus areas
               </Button>
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={() => sendMessage('Create a study plan for me')}
+                onClick={() => sendMessage('Create a personalized study plan for me based on my weak areas')}
               >
                 📅 Study plan
               </Button>
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={() => sendMessage('How can I improve my weak subjects?')}
+                onClick={() => sendMessage('Analyze my learning trends and suggest difficulty adjustments')}
               >
-                💡 Improvement tips
+                📈 Difficulty advice
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => sendMessage('What topics am I improving in and where am I struggling?')}
+              >
+                💡 Progress analysis
               </Button>
             </div>
           </div>
