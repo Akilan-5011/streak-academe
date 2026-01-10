@@ -12,40 +12,81 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, performances, isFirstMessage } = await req.json();
+    const { messages, performances, learningProfile, isFirstMessage } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     
     if (!LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    console.log('Processing chat request, isFirstMessage:', isFirstMessage);
+    console.log('Processing adaptive learning chat request, isFirstMessage:', isFirstMessage);
 
-    // Build performance context
-    const weakSubjects = performances?.filter((p: any) => p.avg_percentage < 60 || p.total_attempts === 0) || [];
-    const strongSubjects = performances?.filter((p: any) => p.avg_percentage >= 80 && p.total_attempts > 0) || [];
-    const mediumSubjects = performances?.filter((p: any) => p.avg_percentage >= 60 && p.avg_percentage < 80 && p.total_attempts > 0) || [];
+    // Enhanced performance analysis with trends
+    const weakSubjects = performances?.filter((p: any) => 
+      p.avg_percentage < 60 || p.total_attempts === 0
+    ) || [];
+    const strongSubjects = performances?.filter((p: any) => 
+      p.avg_percentage >= 80 && p.total_attempts > 0
+    ) || [];
+    const mediumSubjects = performances?.filter((p: any) => 
+      p.avg_percentage >= 60 && p.avg_percentage < 80 && p.total_attempts > 0
+    ) || [];
+    const improvingSubjects = performances?.filter((p: any) => p.recent_trend === 'improving') || [];
+    const decliningSubjects = performances?.filter((p: any) => p.recent_trend === 'declining') || [];
 
     const performanceContext = `
-Student Performance Data:
-- Weak subjects (need focus, <60% or no attempts): ${weakSubjects.map((s: any) => `${s.subject_name} (${s.total_attempts === 0 ? 'no attempts' : s.avg_percentage + '%'})`).join(', ') || 'None'}
-- Medium subjects (60-80%): ${mediumSubjects.map((s: any) => `${s.subject_name} (${s.avg_percentage}%)`).join(', ') || 'None'}
-- Strong subjects (>80%): ${strongSubjects.map((s: any) => `${s.subject_name} (${s.avg_percentage}%)`).join(', ') || 'None'}
+STUDENT ADAPTIVE LEARNING PROFILE:
+
+📊 Current Stats:
+- Total XP: ${learningProfile?.total_xp || 0}
+- Current Streak: ${learningProfile?.current_streak || 0} days
+- Daily XP earned: ${learningProfile?.daily_xp || 0}
+- Recommended Difficulty: ${learningProfile?.recommended_difficulty || 'medium'}
+
+📚 Subject Performance Analysis:
+- Weak subjects (need focus, <60% or no attempts): ${weakSubjects.map((s: any) => 
+  `${s.subject_name} (${s.total_attempts === 0 ? 'no attempts' : s.avg_percentage + '%, avg ' + s.time_spent_avg + 's/question'})`
+).join(', ') || 'None'}
+
+- Medium subjects (60-80%): ${mediumSubjects.map((s: any) => 
+  `${s.subject_name} (${s.avg_percentage}%, trend: ${s.recent_trend})`
+).join(', ') || 'None'}
+
+- Strong subjects (>80%): ${strongSubjects.map((s: any) => 
+  `${s.subject_name} (${s.avg_percentage}%)`
+).join(', ') || 'None'}
+
+📈 Learning Trends:
+- Improving: ${improvingSubjects.map((s: any) => s.subject_name).join(', ') || 'None identified'}
+- Declining: ${decliningSubjects.map((s: any) => s.subject_name).join(', ') || 'None identified'}
+
+🎯 Adaptive Recommendations:
+${weakSubjects.length > 0 ? `- Priority focus on: ${weakSubjects[0].subject_name}` : '- All subjects performing well!'}
+${decliningSubjects.length > 0 ? `- Review declining: ${decliningSubjects.map((s: any) => s.subject_name).join(', ')}` : ''}
 `;
 
-    const systemPrompt = `You are an encouraging and helpful AI study assistant for a learning platform. You have access to the student's quiz performance data.
+    const systemPrompt = `You are an advanced AI Adaptive Learning Assistant for an educational platform. You analyze student performance data and provide personalized, data-driven recommendations.
 
 ${performanceContext}
 
-Guidelines:
-- Be friendly, encouraging, and supportive
-- Give specific, actionable advice based on their performance data
-- Mention specific subjects by name when relevant
-- Keep responses concise but helpful (2-4 sentences usually)
-- Use emojis occasionally to be more engaging
-- If they ask about a specific subject, reference their performance in it
-- Suggest practical study strategies and time management tips
-- Celebrate their strengths while gently guiding improvement in weak areas`;
+ADAPTIVE LEARNING GUIDELINES:
+1. **Personalized Recommendations**: Base all advice on the specific performance data provided
+2. **Difficulty Adjustment**: If student struggles (<60%), suggest starting with easier questions; if excelling (>80%), encourage harder challenges
+3. **Trend Analysis**: Highlight improving trends to encourage, address declining trends with specific strategies
+4. **Time Management**: If average time per question is high, suggest time management tips
+5. **Spaced Repetition**: For weak subjects, recommend frequent short sessions
+6. **Learning Path**: Create clear, actionable study paths based on current level
+
+RESPONSE STYLE:
+- Be encouraging and supportive, but data-driven
+- Use specific numbers and percentages from their data
+- Give 2-4 actionable recommendations per response
+- Use emojis sparingly for engagement
+- Keep responses concise but impactful
+- If they're improving, celebrate it specifically
+- If they're struggling, provide concrete strategies
+
+Example phrases: "Your Data Structures performance improved from X to Y!", "Based on your 65% in OS, I recommend starting with easy-mode questions to build confidence."`;
 
     const apiMessages = [
       { role: 'system', content: systemPrompt },

@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/hooks/useAuth';
+import { useAdmin } from '@/hooks/useAdmin';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { 
@@ -20,7 +21,7 @@ import {
   Youtube,
   Shield,
   Loader2,
-  Lock
+  ShieldX
 } from 'lucide-react';
 import {
   Table,
@@ -38,8 +39,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-
-const ADMIN_ACCESS_CODE = '123456';
 
 interface Subject {
   id: string;
@@ -62,10 +61,7 @@ interface Question {
 const Admin = () => {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
-  
-  const [hasAccess, setHasAccess] = useState(false);
-  const [accessCode, setAccessCode] = useState('');
-  const [checkingAccess, setCheckingAccess] = useState(false);
+  const { isAdmin, loading: adminLoading } = useAdmin();
   
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -93,14 +89,6 @@ const Admin = () => {
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
 
-  // Check session storage for existing access
-  useEffect(() => {
-    const storedAccess = sessionStorage.getItem('admin_access');
-    if (storedAccess === 'granted') {
-      setHasAccess(true);
-    }
-  }, []);
-
   useEffect(() => {
     if (!authLoading && !user) {
       navigate('/auth');
@@ -108,32 +96,16 @@ const Admin = () => {
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
-    if (hasAccess) {
+    if (isAdmin) {
       fetchSubjects();
     }
-  }, [hasAccess]);
+  }, [isAdmin]);
 
   useEffect(() => {
     if (selectedSubjectId) {
       fetchQuestions(selectedSubjectId);
     }
   }, [selectedSubjectId]);
-
-  const handleAccessCodeSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setCheckingAccess(true);
-    
-    if (accessCode === ADMIN_ACCESS_CODE) {
-      setHasAccess(true);
-      sessionStorage.setItem('admin_access', 'granted');
-      toast({ title: "Access Granted", description: "Welcome to the Admin Panel" });
-    } else {
-      toast({ title: "Access Denied", description: "Invalid access code", variant: "destructive" });
-    }
-    
-    setCheckingAccess(false);
-    setAccessCode('');
-  };
 
   const fetchSubjects = async () => {
     const { data, error } = await supabase
@@ -306,7 +278,7 @@ const Admin = () => {
     }
   };
 
-  if (authLoading) {
+  if (authLoading || adminLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center gradient-dark">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -314,50 +286,30 @@ const Admin = () => {
     );
   }
 
-  if (!hasAccess) {
+  if (!isAdmin) {
     return (
       <div className="min-h-screen gradient-dark neural-bg flex items-center justify-center p-4">
         <Card className="w-full max-w-md glass cyber-border">
           <CardHeader className="text-center">
-            <div className="mx-auto w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mb-4">
-              <Lock className="w-8 h-8 text-primary" />
+            <div className="mx-auto w-16 h-16 rounded-full bg-destructive/20 flex items-center justify-center mb-4">
+              <ShieldX className="w-8 h-8 text-destructive" />
             </div>
-            <CardTitle className="text-2xl">Admin Access</CardTitle>
-            <CardDescription>Enter the access code to manage content</CardDescription>
+            <CardTitle className="text-2xl">Access Denied</CardTitle>
+            <CardDescription>
+              You don't have admin privileges to access this panel.
+              <br />
+              Contact your administrator if you need access.
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleAccessCodeSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="access-code">Access Code</Label>
-                <Input
-                  id="access-code"
-                  type="password"
-                  placeholder="Enter 6-digit code"
-                  value={accessCode}
-                  onChange={(e) => setAccessCode(e.target.value)}
-                  className="bg-card/50 text-center text-2xl tracking-widest"
-                  maxLength={6}
-                  required
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={checkingAccess}>
-                {checkingAccess ? (
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                ) : (
-                  <Shield className="w-4 h-4 mr-2" />
-                )}
-                Verify Access
-              </Button>
-              <Button 
-                type="button" 
-                variant="ghost" 
-                className="w-full"
-                onClick={() => navigate('/dashboard')}
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Dashboard
-              </Button>
-            </form>
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={() => navigate('/dashboard')}
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Dashboard
+            </Button>
           </CardContent>
         </Card>
       </div>

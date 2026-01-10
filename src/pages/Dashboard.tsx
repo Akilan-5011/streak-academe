@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useAdmin } from '@/hooks/useAdmin';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,6 +14,7 @@ import AIStudyChat from '@/components/AIStudyChat';
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user, signOut, loading } = useAuth();
+  const { isAdmin, loading: adminLoading } = useAdmin();
   const [profile, setProfile] = useState<any>(null);
   const [canTakeQuiz, setCanTakeQuiz] = useState(true);
   const [nextQuizTime, setNextQuizTime] = useState<string>('');
@@ -387,17 +389,19 @@ const Dashboard = () => {
             </Button>
           </div>
 
-          <Button 
-            variant="outline" 
-            className="h-20 border-primary/50 bg-primary/5"
-            onClick={() => navigate('/admin')}
-          >
-            <div className="text-center">
-              <Shield className="h-6 w-6 mx-auto mb-1 text-primary" />
-              <div className="font-semibold text-sm text-primary">Admin Panel</div>
-              <div className="text-xs text-muted-foreground">Manage content</div>
-            </div>
-          </Button>
+          {isAdmin && (
+            <Button 
+              variant="outline" 
+              className="h-20 border-primary/50 bg-primary/5"
+              onClick={() => navigate('/admin')}
+            >
+              <div className="text-center">
+                <Shield className="h-6 w-6 mx-auto mb-1 text-primary" />
+                <div className="font-semibold text-sm text-primary">Admin Panel</div>
+                <div className="text-xs text-muted-foreground">Manage content</div>
+              </div>
+            </Button>
+          )}
         </div>
       </div>
     </div>
