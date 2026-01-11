@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -236,6 +236,16 @@ const Auth = () => {
                 </form>
               </TabsContent>
             </Tabs>
+
+            {/* Admin login link */}
+            <div className="mt-4 pt-4 border-t border-border/30 text-center">
+              <Link 
+                to="/admin-login" 
+                className="text-xs text-muted-foreground hover:text-primary transition-colors"
+              >
+                Administrator? Access Admin Portal →
+              </Link>
+            </div>
           </CardContent>
         </Card>
       </div>
