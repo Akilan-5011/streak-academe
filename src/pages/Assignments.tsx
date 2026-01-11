@@ -10,6 +10,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAdmin } from '@/hooks/useAdmin';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { assignmentSchema, submissionSchema, gradeSchema } from '@/lib/validationSchemas';
 import { 
   ArrowLeft, 
   Plus, 
@@ -141,18 +142,28 @@ const Assignments = () => {
 
   const handleAddAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newAssignment.title || !newAssignment.subject_id || !newAssignment.due_date) {
-      toast({ title: "Error", description: "Please fill all required fields", variant: "destructive" });
+    
+    // Validate input with zod schema
+    const validationResult = assignmentSchema.safeParse({
+      title: newAssignment.title,
+      description: newAssignment.description || undefined,
+      subject_id: newAssignment.subject_id,
+      due_date: newAssignment.due_date
+    });
+    
+    if (!validationResult.success) {
+      const errorMessage = validationResult.error.errors[0]?.message || 'Validation failed';
+      toast({ title: "Validation Error", description: errorMessage, variant: "destructive" });
       return;
     }
     
     setAddingAssignment(true);
     
     const { error } = await supabase.from('assignments').insert({
-      title: newAssignment.title,
-      description: newAssignment.description || null,
-      subject_id: newAssignment.subject_id,
-      due_date: new Date(newAssignment.due_date).toISOString(),
+      title: validationResult.data.title,
+      description: validationResult.data.description,
+      subject_id: validationResult.data.subject_id,
+      due_date: new Date(validationResult.data.due_date).toISOString(),
       created_by: user!.id
     });
     
@@ -180,17 +191,24 @@ const Assignments = () => {
   };
 
   const handleSubmitAssignment = async (assignmentId: string) => {
-    if (!submissionContent.trim()) {
-      toast({ title: "Error", description: "Please enter your submission", variant: "destructive" });
+    // Validate input with zod schema
+    const validationResult = submissionSchema.safeParse({
+      content: submissionContent,
+      assignment_id: assignmentId
+    });
+    
+    if (!validationResult.success) {
+      const errorMessage = validationResult.error.errors[0]?.message || 'Validation failed';
+      toast({ title: "Validation Error", description: errorMessage, variant: "destructive" });
       return;
     }
     
     setSubmitting(true);
     
     const { error } = await supabase.from('assignment_submissions').insert({
-      assignment_id: assignmentId,
+      assignment_id: validationResult.data.assignment_id,
       user_id: user!.id,
-      content: submissionContent
+      content: validationResult.data.content
     });
     
     if (error) {
@@ -227,14 +245,25 @@ const Assignments = () => {
     if (!gradingSubmission) return;
     
     const grade = parseInt(gradeValue);
-    if (isNaN(grade) || grade < 0 || grade > 100) {
-      toast({ title: "Error", description: "Grade must be between 0 and 100", variant: "destructive" });
+    
+    // Validate input with zod schema
+    const validationResult = gradeSchema.safeParse({
+      grade: isNaN(grade) ? undefined : grade,
+      feedback: feedbackValue || undefined
+    });
+    
+    if (!validationResult.success) {
+      const errorMessage = validationResult.error.errors[0]?.message || 'Validation failed';
+      toast({ title: "Validation Error", description: errorMessage, variant: "destructive" });
       return;
     }
     
     const { error } = await supabase
       .from('assignment_submissions')
-      .update({ grade, feedback: feedbackValue || null })
+      .update({ 
+        grade: validationResult.data.grade, 
+        feedback: validationResult.data.feedback 
+      })
       .eq('id', gradingSubmission.id);
     
     if (error) {
