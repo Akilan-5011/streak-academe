@@ -1,9 +1,31 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+const authenticateRequest = async (req: Request) => {
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    throw new Error('Missing authorization');
+  }
+
+  const supabaseClient = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+    { global: { headers: { Authorization: authHeader } } }
+  );
+
+  const token = authHeader.replace('Bearer ', '');
+  const { data, error } = await supabaseClient.auth.getUser(token);
+  if (error || !data?.user) {
+    throw new Error('Unauthorized');
+  }
+
+  return data.user;
 };
 
 serve(async (req) => {
@@ -12,6 +34,10 @@ serve(async (req) => {
   }
 
   try {
+    // Authenticate the request first
+    const user = await authenticateRequest(req);
+    console.log('Authenticated user:', user.id);
+
     const { messages, performances, learningProfile, isFirstMessage } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     
@@ -137,9 +163,10 @@ Example phrases: "Your Data Structures performance improved from X to Y!", "Base
   } catch (error) {
     console.error('Error in ai-study-chat:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const status = errorMessage === 'Missing authorization' || errorMessage === 'Unauthorized' ? 401 : 500;
     return new Response(
       JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
