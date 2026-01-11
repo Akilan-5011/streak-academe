@@ -11,6 +11,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAdmin } from '@/hooks/useAdmin';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { questionSchema, subjectSchema } from '@/lib/validationSchemas';
 import { 
   ArrowLeft, 
   Plus, 
@@ -140,15 +141,23 @@ const Admin = () => {
 
   const handleAddSubject = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newSubject.name.trim()) {
-      toast({ title: "Error", description: "Subject name is required", variant: "destructive" });
+    
+    // Validate input with zod schema
+    const validationResult = subjectSchema.safeParse({
+      name: newSubject.name,
+      youtube_link: newSubject.youtube_link || undefined
+    });
+    
+    if (!validationResult.success) {
+      const errorMessage = validationResult.error.errors[0]?.message || 'Validation failed';
+      toast({ title: "Validation Error", description: errorMessage, variant: "destructive" });
       return;
     }
     
     setAddingSubject(true);
     const { error } = await supabase.from('subjects').insert({
-      name: newSubject.name.trim(),
-      youtube_link: newSubject.youtube_link.trim() || null
+      name: validationResult.data.name,
+      youtube_link: validationResult.data.youtube_link
     });
     
     if (error) {
@@ -199,21 +208,35 @@ const Admin = () => {
 
   const handleAddQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newQuestion.subject_id || !newQuestion.question.trim()) {
-      toast({ title: "Error", description: "Subject and question are required", variant: "destructive" });
+    
+    // Validate input with zod schema
+    const validationResult = questionSchema.safeParse({
+      question: newQuestion.question,
+      option_a: newQuestion.option_a,
+      option_b: newQuestion.option_b,
+      option_c: newQuestion.option_c,
+      option_d: newQuestion.option_d,
+      correct_answer: newQuestion.correct_answer,
+      difficulty: newQuestion.difficulty,
+      subject_id: newQuestion.subject_id
+    });
+    
+    if (!validationResult.success) {
+      const errorMessage = validationResult.error.errors[0]?.message || 'Validation failed';
+      toast({ title: "Validation Error", description: errorMessage, variant: "destructive" });
       return;
     }
     
     setAddingQuestion(true);
     const { error } = await supabase.from('questions').insert({
-      subject_id: newQuestion.subject_id,
-      question: newQuestion.question.trim(),
-      option_a: newQuestion.option_a.trim(),
-      option_b: newQuestion.option_b.trim(),
-      option_c: newQuestion.option_c.trim(),
-      option_d: newQuestion.option_d.trim(),
-      correct_answer: newQuestion.correct_answer,
-      difficulty: newQuestion.difficulty
+      subject_id: validationResult.data.subject_id,
+      question: validationResult.data.question,
+      option_a: validationResult.data.option_a,
+      option_b: validationResult.data.option_b,
+      option_c: validationResult.data.option_c,
+      option_d: validationResult.data.option_d,
+      correct_answer: validationResult.data.correct_answer,
+      difficulty: validationResult.data.difficulty
     });
     
     if (error) {

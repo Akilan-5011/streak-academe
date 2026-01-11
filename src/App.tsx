@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
@@ -37,21 +38,77 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/daily-quiz" element={<DailyQuiz />} />
-              <Route path="/subjects" element={<Subjects />} />
-              <Route path="/exam" element={<Exam />} />
-              <Route path="/results" element={<Results />} />
-              <Route path="/profile" element={<Profile />} />
-              <Route path="/badges" element={<Badges />} />
-              <Route path="/leaderboard" element={<Leaderboard />} />
-              <Route path="/review" element={<Review />} />
-              <Route path="/certificates" element={<Certificates />} />
-              <Route path="/progress" element={<Progress />} />
-              <Route path="/study-planner" element={<StudyPlanner />} />
-              <Route path="/admin" element={<Admin />} />
               <Route path="/admin-login" element={<AdminLogin />} />
-              <Route path="/assignments" element={<Assignments />} />
+              <Route path="/dashboard" element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              } />
+              <Route path="/daily-quiz" element={
+                <ProtectedRoute>
+                  <DailyQuiz />
+                </ProtectedRoute>
+              } />
+              <Route path="/subjects" element={
+                <ProtectedRoute>
+                  <Subjects />
+                </ProtectedRoute>
+              } />
+              <Route path="/exam" element={
+                <ProtectedRoute>
+                  <Exam />
+                </ProtectedRoute>
+              } />
+              <Route path="/results" element={
+                <ProtectedRoute>
+                  <Results />
+                </ProtectedRoute>
+              } />
+              <Route path="/profile" element={
+                <ProtectedRoute>
+                  <Profile />
+                </ProtectedRoute>
+              } />
+              <Route path="/badges" element={
+                <ProtectedRoute>
+                  <Badges />
+                </ProtectedRoute>
+              } />
+              <Route path="/leaderboard" element={
+                <ProtectedRoute>
+                  <Leaderboard />
+                </ProtectedRoute>
+              } />
+              <Route path="/review" element={
+                <ProtectedRoute>
+                  <Review />
+                </ProtectedRoute>
+              } />
+              <Route path="/certificates" element={
+                <ProtectedRoute>
+                  <Certificates />
+                </ProtectedRoute>
+              } />
+              <Route path="/progress" element={
+                <ProtectedRoute>
+                  <Progress />
+                </ProtectedRoute>
+              } />
+              <Route path="/study-planner" element={
+                <ProtectedRoute>
+                  <StudyPlanner />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin" element={
+                <ProtectedRoute requireAdmin>
+                  <Admin />
+                </ProtectedRoute>
+              } />
+              <Route path="/assignments" element={
+                <ProtectedRoute>
+                  <Assignments />
+                </ProtectedRoute>
+              } />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
