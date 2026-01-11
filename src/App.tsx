@@ -19,6 +19,7 @@ import Certificates from "./pages/Certificates";
 import Progress from "./pages/Progress";
 import StudyPlanner from "./pages/StudyPlanner";
 import Admin from "./pages/Admin";
+import AdminLogin from "./pages/AdminLogin";
 import Assignments from "./pages/Assignments";
 import NotFound from "./pages/NotFound";
 import { ThemeProvider } from "./components/ThemeProvider";
@@ -49,6 +50,7 @@ const App = () => (
               <Route path="/progress" element={<Progress />} />
               <Route path="/study-planner" element={<StudyPlanner />} />
               <Route path="/admin" element={<Admin />} />
+              <Route path="/admin-login" element={<AdminLogin />} />
               <Route path="/assignments" element={<Assignments />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
