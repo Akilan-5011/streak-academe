@@ -66,12 +66,11 @@ const Exam = () => {
   const startExam = async () => {
     setLoading(true);
     
-    // Use the secure view to get questions without correct_answer
-    const { data, error } = await supabase
-      .from('questions_for_quiz')
-      .select('*')
-      .eq('subject_id', subjectId)
-      .eq('difficulty', difficulty);
+    // Use the secure RPC function to get questions without exposing correct_answer
+    const { data, error } = await supabase.rpc('get_quiz_questions', {
+      p_difficulty: difficulty,
+      p_limit: 50 // Get more than needed, then filter by subject
+    });
 
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -79,10 +78,13 @@ const Exam = () => {
       return;
     }
 
-    if (!data || data.length < parseInt(questionCount)) {
+    // Filter by subject ID
+    const subjectQuestions = data?.filter((q: Question) => q.subject_id === subjectId) || [];
+
+    if (subjectQuestions.length < parseInt(questionCount)) {
       toast({ 
         title: "Not enough questions", 
-        description: `Only ${data?.length || 0} ${difficulty} questions available for this subject. Please select a different difficulty or reduce question count.`,
+        description: `Only ${subjectQuestions.length} ${difficulty} questions available for this subject. Please select a different difficulty or reduce question count.`,
         variant: "destructive" 
       });
       setLoading(false);
@@ -91,7 +93,7 @@ const Exam = () => {
     }
 
     // Randomly select questions based on user choice
-    const shuffled = data.sort(() => 0.5 - Math.random());
+    const shuffled = subjectQuestions.sort(() => 0.5 - Math.random());
     const selected = shuffled.slice(0, parseInt(questionCount));
     setQuestions(selected);
     setTimeLeft(parseInt(timeLimit) * 60);
