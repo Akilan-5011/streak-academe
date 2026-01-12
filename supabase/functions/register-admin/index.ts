@@ -12,19 +12,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { email, password, name, adminCode } = await req.json();
+    const { email, password, name } = await req.json();
     
     console.log('Admin registration attempt for:', email);
-
-    // Validate admin code
-    const validAdminCode = Deno.env.get('ADMIN_SECRET_CODE');
-    if (!adminCode || adminCode !== validAdminCode) {
-      console.log('Invalid admin code provided');
-      return new Response(
-        JSON.stringify({ error: 'Invalid admin code' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
 
     // Create Supabase admin client
     const supabaseAdmin = createClient(

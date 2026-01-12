@@ -19,8 +19,7 @@ const signInSchema = z.object({
 const signUpSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email('Invalid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  adminCode: z.string().min(1, 'Admin code is required')
+  password: z.string().min(6, 'Password must be at least 6 characters')
 });
 
 const AdminLogin = () => {
@@ -31,7 +30,7 @@ const AdminLogin = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [activeTab, setActiveTab] = useState('signin');
   const [signInData, setSignInData] = useState({ email: '', password: '' });
-  const [signUpData, setSignUpData] = useState({ name: '', email: '', password: '', adminCode: '' });
+  const [signUpData, setSignUpData] = useState({ name: '', email: '', password: '' });
 
   // Check if already logged in as admin
   useEffect(() => {
@@ -110,8 +109,7 @@ const AdminLogin = () => {
         body: {
           email: validated.email,
           password: validated.password,
-          name: validated.name,
-          adminCode: validated.adminCode
+          name: validated.name
         }
       });
 
@@ -130,7 +128,7 @@ const AdminLogin = () => {
       toast({ title: "Admin Registered!", description: "You can now sign in with your credentials" });
       setActiveTab('signin');
       setSignInData({ email: validated.email, password: '' });
-      setSignUpData({ name: '', email: '', password: '', adminCode: '' });
+      setSignUpData({ name: '', email: '', password: '' });
 
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -299,19 +297,6 @@ const AdminLogin = () => {
                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="admin-code" className="text-muted-foreground">Admin Secret Code</Label>
-                    <Input
-                      id="admin-code"
-                      type="password"
-                      placeholder="Enter admin secret code"
-                      value={signUpData.adminCode}
-                      onChange={(e) => setSignUpData({ ...signUpData, adminCode: e.target.value })}
-                      className="bg-card/50 border-border/50 focus:border-destructive"
-                      required
-                    />
-                    <p className="text-xs text-muted-foreground">Contact your system administrator for the secret code</p>
                   </div>
                   <Button 
                     type="submit" 
