@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,7 +21,10 @@ import {
   Clock,
   Loader2,
   Trash2,
-  Eye
+  Eye,
+  File,
+  Download,
+  X
 } from 'lucide-react';
 import {
   Dialog,
@@ -83,6 +86,9 @@ const Assignments = () => {
   const [submissionContent, setSubmissionContent] = useState('');
   const [submittingTo, setSubmittingTo] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Admin: View submissions
   const [viewingSubmissions, setViewingSubmissions] = useState<string | null>(null);
@@ -190,6 +196,48 @@ const Assignments = () => {
     }
   };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type (PDF only)
+      if (file.type !== 'application/pdf') {
+        toast({ title: "Error", description: "Only PDF files are allowed", variant: "destructive" });
+        return;
+      }
+      // Validate file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        toast({ title: "Error", description: "File size must be less than 10MB", variant: "destructive" });
+        return;
+      }
+      setSelectedFile(file);
+    }
+  };
+
+  const uploadFile = async (assignmentId: string): Promise<string | null> => {
+    if (!selectedFile || !user) return null;
+    
+    setUploadingFile(true);
+    const fileExt = selectedFile.name.split('.').pop();
+    const fileName = `${user.id}/${assignmentId}/${Date.now()}.${fileExt}`;
+    
+    const { error } = await supabase.storage
+      .from('assignment-files')
+      .upload(fileName, selectedFile);
+    
+    setUploadingFile(false);
+    
+    if (error) {
+      toast({ title: "Upload Error", description: error.message, variant: "destructive" });
+      return null;
+    }
+    
+    const { data: { publicUrl } } = supabase.storage
+      .from('assignment-files')
+      .getPublicUrl(fileName);
+    
+    return fileName; // Store the path, not public URL since bucket is private
+  };
+
   const handleSubmitAssignment = async (assignmentId: string) => {
     // Validate input with zod schema
     const validationResult = submissionSchema.safeParse({
@@ -205,10 +253,21 @@ const Assignments = () => {
     
     setSubmitting(true);
     
+    // Upload file if selected
+    let fileUrl: string | null = null;
+    if (selectedFile) {
+      fileUrl = await uploadFile(assignmentId);
+      if (!fileUrl && selectedFile) {
+        setSubmitting(false);
+        return; // Upload failed
+      }
+    }
+    
     const { error } = await supabase.from('assignment_submissions').insert({
       assignment_id: validationResult.data.assignment_id,
       user_id: user!.id,
-      content: validationResult.data.content
+      content: validationResult.data.content,
+      file_url: fileUrl
     });
     
     if (error) {
@@ -220,6 +279,7 @@ const Assignments = () => {
     } else {
       toast({ title: "Success", description: "Assignment submitted successfully!" });
       setSubmissionContent('');
+      setSelectedFile(null);
       setSubmittingTo(null);
       fetchData();
     }
@@ -473,22 +533,63 @@ const Assignments = () => {
                                 </DialogHeader>
                                 <div className="space-y-4">
                                   <div className="space-y-2">
-                                    <Label>Your Submission</Label>
+                                    <Label>Your Answer/Notes (Optional)</Label>
                                     <Textarea
-                                      placeholder="Enter your answer or work here..."
+                                      placeholder="Enter any notes or text answer here..."
                                       value={submissionContent}
                                       onChange={(e) => setSubmissionContent(e.target.value)}
-                                      rows={6}
+                                      rows={4}
                                     />
+                                  </div>
+                                  
+                                  {/* PDF Upload Section */}
+                                  <div className="space-y-2">
+                                    <Label>Upload PDF (Optional)</Label>
+                                    <input
+                                      type="file"
+                                      ref={fileInputRef}
+                                      accept=".pdf"
+                                      onChange={handleFileSelect}
+                                      className="hidden"
+                                    />
+                                    {selectedFile ? (
+                                      <div className="flex items-center gap-2 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+                                        <File className="w-5 h-5 text-primary" />
+                                        <span className="flex-1 text-sm truncate">{selectedFile.name}</span>
+                                        <span className="text-xs text-muted-foreground">
+                                          {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                                        </span>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-6 w-6"
+                                          onClick={() => setSelectedFile(null)}
+                                        >
+                                          <X className="w-4 h-4" />
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="w-full"
+                                        onClick={() => fileInputRef.current?.click()}
+                                      >
+                                        <Upload className="w-4 h-4 mr-2" />
+                                        Choose PDF File
+                                      </Button>
+                                    )}
+                                    <p className="text-xs text-muted-foreground">Max file size: 10MB</p>
                                   </div>
                                 </div>
                                 <DialogFooter>
                                   <Button 
                                     onClick={() => handleSubmitAssignment(assignment.id)}
-                                    disabled={submitting}
+                                    disabled={submitting || uploadingFile || (!submissionContent.trim() && !selectedFile)}
                                   >
-                                    {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                                    Submit Assignment
+                                    {(submitting || uploadingFile) ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                                    {uploadingFile ? 'Uploading...' : 'Submit Assignment'}
                                   </Button>
                                 </DialogFooter>
                               </DialogContent>
@@ -530,7 +631,34 @@ const Assignments = () => {
                           {format(new Date(sub.submitted_at), 'PPP p')}
                         </span>
                       </div>
-                      <p className="text-sm bg-muted/50 p-3 rounded mb-3 whitespace-pre-wrap">{sub.content}</p>
+                      {sub.content && (
+                        <p className="text-sm bg-muted/50 p-3 rounded mb-3 whitespace-pre-wrap">{sub.content}</p>
+                      )}
+                      
+                      {/* Show PDF download button if file was uploaded */}
+                      {sub.file_url && (
+                        <div className="flex items-center gap-2 mb-3 p-2 bg-primary/10 rounded">
+                          <File className="w-4 h-4 text-primary" />
+                          <span className="text-sm">PDF Attached</span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              const { data } = await supabase.storage
+                                .from('assignment-files')
+                                .createSignedUrl(sub.file_url!, 60);
+                              if (data?.signedUrl) {
+                                window.open(data.signedUrl, '_blank');
+                              } else {
+                                toast({ title: "Error", description: "Could not generate download link", variant: "destructive" });
+                              }
+                            }}
+                          >
+                            <Download className="w-4 h-4 mr-1" />
+                            View PDF
+                          </Button>
+                        </div>
+                      )}
                       
                       {sub.grade !== null ? (
                         <div className="flex items-center gap-4">
