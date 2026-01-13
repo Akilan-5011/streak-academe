@@ -66,8 +66,9 @@ export const assignmentSchema = z.object({
 export const submissionSchema = z.object({
   content: z.string()
     .trim()
-    .min(10, 'Submission must be at least 10 characters')
-    .max(10000, 'Submission must be less than 10000 characters'),
+    .max(10000, 'Submission must be less than 10000 characters')
+    .optional()
+    .default(''),
   assignment_id: z.string().uuid('Invalid assignment ID')
 });
 
